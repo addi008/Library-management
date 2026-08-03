@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS reservations (
 -- Sample Seed Data (5-10 rows in books and members)
 -- ===================================================
 
-INSERT INTO books (title, author, isbn, category, total_copies, available_copies, added_date) VALUES
+INSERT IGNORE INTO books (title, author, isbn, category, total_copies, available_copies, added_date) VALUES
 ('Clean Code', 'Robert C. Martin', '9780132350884', 'Software Engineering', 5, 5, '2025-01-10'),
 ('Effective Java', 'Joshua Bloch', '9780134685991', 'Programming', 4, 4, '2025-01-12'),
 ('Design Patterns', 'Erich Gamma et al.', '9780201633610', 'Software Architecture', 3, 3, '2025-01-15'),
@@ -68,7 +68,7 @@ INSERT INTO books (title, author, isbn, category, total_copies, available_copies
 ('Introduction to Algorithms', 'Thomas H. Cormen', '9780262033848', 'Computer Science', 3, 3, '2025-02-15'),
 ('Database System Concepts', 'Abraham Silberschatz', '9780073523323', 'Databases', 4, 4, '2025-03-01');
 
-INSERT INTO members (name, email, phone, membership_date, membership_type) VALUES
+INSERT IGNORE INTO members (name, email, phone, membership_date, membership_type) VALUES
 ('Alice Smith', 'alice.smith@example.com', '555-0101', '2025-01-01', 'PREMIUM'),
 ('Bob Johnson', 'bob.johnson@example.com', '555-0102', '2025-01-05', 'STANDARD'),
 ('Charlie Brown', 'charlie.brown@example.com', '555-0103', '2025-01-15', 'STUDENT'),

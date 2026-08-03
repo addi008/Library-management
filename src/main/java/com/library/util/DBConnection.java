@@ -22,6 +22,7 @@ public class DBConnection {
     private String url;
     private String user;
     private String password;
+    private boolean isFallbackActive = false;
 
     private DBConnection() {
         loadProperties();
@@ -69,16 +70,21 @@ public class DBConnection {
     }
 
     public Connection getConnection() throws SQLException {
+        if (isFallbackActive) {
+            String fallbackUrl = "jdbc:h2:mem:library_db;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;INIT=RUNSCRIPT FROM 'schema.sql'";
+            return DriverManager.getConnection(fallbackUrl, "sa", "");
+        }
+
         try {
             return DriverManager.getConnection(url, user, password);
         } catch (SQLException e) {
-            // If configured MySQL connection fails, attempt fallback to H2 embedded database for test environment readiness
             if (driver.contains("mysql") && !url.contains("h2")) {
-                LOGGER.warning("Could not connect to MySQL server at (" + url + "). Attempting embedded test fallback...");
+                LOGGER.warning("Could not connect to MySQL server. Activating embedded H2 database fallback...");
                 try {
                     String fallbackDriver = "org.h2.Driver";
                     String fallbackUrl = "jdbc:h2:mem:library_db;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;INIT=RUNSCRIPT FROM 'schema.sql'";
                     Class.forName(fallbackDriver);
+                    isFallbackActive = true;
                     return DriverManager.getConnection(fallbackUrl, "sa", "");
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "Fallback database connection also failed.", ex);
@@ -89,10 +95,10 @@ public class DBConnection {
     }
 
     public String getUrl() {
-        return url;
+        return isFallbackActive ? "jdbc:h2:mem:library_db (Embedded Fallback)" : url;
     }
 
     public String getDriver() {
-        return driver;
+        return isFallbackActive ? "org.h2.Driver" : driver;
     }
 }
