@@ -57,7 +57,9 @@ public class BookDAOImpl implements BookDAO {
             stmt.setString(4, book.getCategory());
             stmt.setInt(5, book.getTotalCopies());
             stmt.setInt(6, book.getAvailableCopies());
-            stmt.setDate(7, Date.valueOf(book.getAddedDate()));
+            stmt.setDate(7, book.getAddedDate() != null
+                    ? Date.valueOf(book.getAddedDate())
+                    : Date.valueOf(java.time.LocalDate.now()));
             stmt.setInt(8, book.getBookId());
 
             return stmt.executeUpdate() > 0;

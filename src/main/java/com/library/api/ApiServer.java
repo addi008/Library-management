@@ -7,8 +7,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.library.dao.BookDAO;
 import com.library.dao.MemberDAO;
-import com.library.dao.impl.BookDAOImpl;
-import com.library.dao.impl.MemberDAOImpl;
+import com.library.dao.impl.*;
 import com.library.model.*;
 import com.library.service.*;
 import com.library.service.impl.*;
@@ -54,10 +53,22 @@ public class ApiServer {
         port(PORT);
 
         // Static files mapping for embedded web server if desired
-        staticFiles.location("/frontend");
+        staticFiles.externalLocation("frontend");
 
         // Enable CORS
         enableCORS();
+
+        // ── Global exception handler: always return JSON, never HTML ──
+        exception(Exception.class, (exception, request, response) -> {
+            response.status(500);
+            response.type("application/json");
+            Map<String, String> errBody = new HashMap<>();
+            errBody.put("error", exception.getMessage() != null
+                    ? exception.getMessage() : "Internal server error");
+            response.body(gson.toJson(errBody));
+            LOGGER.warning("[API] Unhandled exception on " + request.requestMethod()
+                    + " " + request.pathInfo() + ": " + exception.getMessage());
+        });
 
         // Service Dependencies (Using existing business logic layer)
         BookDAO bookDAO = new BookDAOImpl();
@@ -123,13 +134,33 @@ public class ApiServer {
         put("/api/books/:id", (req, res) -> {
             res.type("application/json");
             int id = Integer.parseInt(req.params(":id"));
-            Book incoming = gson.fromJson(req.body(), Book.class);
-            incoming.setBookId(id);
-            if (bookDAO.updateBook(incoming)) {
-                return gson.toJson(incoming);
+            try {
+                Book incoming = gson.fromJson(req.body(), Book.class);
+                incoming.setBookId(id);
+                // Preserve addedDate and calculate availableCopies delta
+                try {
+                    Book existing = bookDAO.getBookById(id);
+                    if (incoming.getAddedDate() == null) {
+                        incoming.setAddedDate(existing.getAddedDate());
+                    }
+                    // Recalculate available copies: keep checked-out count constant
+                    int delta = incoming.getTotalCopies() - existing.getTotalCopies();
+                    int newAvail = Math.max(0, existing.getAvailableCopies() + delta);
+                    incoming.setAvailableCopies(newAvail);
+                } catch (Exception fetchEx) {
+                    if (incoming.getAddedDate() == null) incoming.setAddedDate(LocalDate.now());
+                    if (incoming.getAvailableCopies() <= 0)
+                        incoming.setAvailableCopies(incoming.getTotalCopies());
+                }
+                if (bookDAO.updateBook(incoming)) {
+                    return gson.toJson(incoming);
+                }
+                res.status(400);
+                return errorJson("Failed to update book ID: " + id);
+            } catch (Exception e) {
+                res.status(400);
+                return errorJson(e.getMessage() != null ? e.getMessage() : "Invalid request");
             }
-            res.status(400);
-            return errorJson("Failed to update book ID: " + id);
         });
 
         delete("/api/books/:id", (req, res) -> {
@@ -176,13 +207,27 @@ public class ApiServer {
         put("/api/members/:id", (req, res) -> {
             res.type("application/json");
             int id = Integer.parseInt(req.params(":id"));
-            Member incoming = gson.fromJson(req.body(), Member.class);
-            incoming.setMemberId(id);
-            if (memberDAO.updateMember(incoming)) {
-                return gson.toJson(incoming);
+            try {
+                Member incoming = gson.fromJson(req.body(), Member.class);
+                incoming.setMemberId(id);
+                // Preserve membershipDate from existing record
+                if (incoming.getMembershipDate() == null) {
+                    try {
+                        Member existing = memberDAO.getMemberById(id);
+                        incoming.setMembershipDate(existing.getMembershipDate());
+                    } catch (Exception fetchEx) {
+                        incoming.setMembershipDate(LocalDate.now());
+                    }
+                }
+                if (memberDAO.updateMember(incoming)) {
+                    return gson.toJson(incoming);
+                }
+                res.status(400);
+                return errorJson("Failed to update member ID: " + id);
+            } catch (Exception e) {
+                res.status(400);
+                return errorJson(e.getMessage() != null ? e.getMessage() : "Invalid request");
             }
-            res.status(400);
-            return errorJson("Failed to update member ID: " + id);
         });
 
         delete("/api/members/:id", (req, res) -> {
@@ -213,9 +258,14 @@ public class ApiServer {
             Map<String, Object> body = gson.fromJson(req.body(), Map.class);
             int memberId = ((Number) body.get("memberId")).intValue();
             int bookId = ((Number) body.get("bookId")).intValue();
+            String paymentMode = body.containsKey("paymentMode") ? String.valueOf(body.get("paymentMode")) : "IN_PERSON";
 
             try {
                 Transaction t = transactionService.issueBook(memberId, bookId);
+                if (t != null && paymentMode != null && !paymentMode.isEmpty()) {
+                    t.setPaymentMode(paymentMode);
+                    new TransactionDAOImpl().updateTransaction(t);
+                }
                 res.status(201);
                 return gson.toJson(t);
             } catch (Exception e) {

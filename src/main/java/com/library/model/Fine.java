@@ -9,6 +9,7 @@ public class Fine {
     private BigDecimal amount;
     private boolean paid;
     private LocalDate paidDate;
+    private String reason = "Late Return";
 
     public Fine() {
     }
@@ -65,6 +66,14 @@ public class Fine {
 
     public void setPaidDate(LocalDate paidDate) {
         this.paidDate = paidDate;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
     }
 
     @Override

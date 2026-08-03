@@ -17,7 +17,7 @@ public class FineDAOImpl implements FineDAO {
 
     @Override
     public int createFine(Fine fine) {
-        String sql = "INSERT INTO fines (transaction_id, amount, paid, paid_date) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO fines (transaction_id, amount, paid, paid_date, reason) VALUES (?, ?, ?, ?, ?)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
@@ -29,6 +29,7 @@ public class FineDAOImpl implements FineDAO {
             } else {
                 stmt.setNull(4, Types.DATE);
             }
+            stmt.setString(5, fine.getReason() != null ? fine.getReason() : "Late Return");
 
             int affectedRows = stmt.executeUpdate();
             if (affectedRows > 0) {
@@ -48,7 +49,7 @@ public class FineDAOImpl implements FineDAO {
 
     @Override
     public boolean updateFine(Fine fine) {
-        String sql = "UPDATE fines SET transaction_id = ?, amount = ?, paid = ?, paid_date = ? WHERE fine_id = ?";
+        String sql = "UPDATE fines SET transaction_id = ?, amount = ?, paid = ?, paid_date = ?, reason = ? WHERE fine_id = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
@@ -60,7 +61,8 @@ public class FineDAOImpl implements FineDAO {
             } else {
                 stmt.setNull(4, Types.DATE);
             }
-            stmt.setInt(5, fine.getFineId());
+            stmt.setString(5, fine.getReason() != null ? fine.getReason() : "Late Return");
+            stmt.setInt(6, fine.getFineId());
 
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -150,6 +152,12 @@ public class FineDAOImpl implements FineDAO {
         fine.setPaid(rs.getBoolean("paid"));
         Date paidDate = rs.getDate("paid_date");
         if (paidDate != null) fine.setPaidDate(paidDate.toLocalDate());
+        try {
+            String r = rs.getString("reason");
+            if (r != null) fine.setReason(r);
+        } catch (SQLException ignored) {
+            fine.setReason("Late Return");
+        }
         return fine;
     }
 }

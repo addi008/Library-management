@@ -15,6 +15,7 @@ public class Transaction {
     private LocalDate dueDate;
     private LocalDate returnDate;
     private TransactionStatus status;
+    private String paymentMode = "IN_PERSON";
 
     public Transaction() {
     }
@@ -91,6 +92,14 @@ public class Transaction {
 
     public void setStatus(TransactionStatus status) {
         this.status = status;
+    }
+
+    public String getPaymentMode() {
+        return paymentMode;
+    }
+
+    public void setPaymentMode(String paymentMode) {
+        this.paymentMode = paymentMode;
     }
 
     @Override

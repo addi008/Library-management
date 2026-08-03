@@ -1,2 +1,40 @@
 Aug 03, 2026 12:34:44 PM com.library.Phase5Test main
 INFO: Phase 5 Test Logger initialized successfully.
+Aug 03, 2026 11:35:59 PM com.library.api.ApiServer startServer
+INFO: REST API Server initialized and listening on http://localhost:4567
+Aug 03, 2026 11:36:13 PM com.library.util.DBConnection <init>
+INFO: JDBC Driver loaded successfully: com.mysql.cj.jdbc.Driver
+Aug 03, 2026 11:36:14 PM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 12:56:04 AM com.library.api.ApiServer startServer
+INFO: REST API Server initialized and listening on http://localhost:4567
+Aug 04, 2026 12:56:53 AM com.library.util.DBConnection <init>
+INFO: JDBC Driver loaded successfully: com.mysql.cj.jdbc.Driver
+Aug 04, 2026 12:56:54 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 12:56:54 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 12:56:54 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 12:56:54 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 12:56:54 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:07:38 AM com.library.api.ApiServer startServer
+INFO: REST API Server initialized and listening on http://localhost:4567
+Aug 04, 2026 1:08:13 AM com.library.util.DBConnection <init>
+INFO: JDBC Driver loaded successfully: com.mysql.cj.jdbc.Driver
+Aug 04, 2026 1:08:14 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:08:14 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:08:14 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:08:14 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:08:14 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:08:14 AM com.library.util.DBConnection getConnection
+WARNING: Could not connect to MySQL server. Activating embedded H2 database fallback...
+Aug 04, 2026 1:12:08 AM com.library.service.impl.TransactionServiceImpl issueBook
+INFO: Successfully issued Book ID 2 to Member ID 2. Transaction ID: 8

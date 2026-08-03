@@ -17,7 +17,7 @@ public class TransactionDAOImpl implements TransactionDAO {
 
     @Override
     public int createTransaction(Transaction transaction) {
-        String sql = "INSERT INTO transactions (book_id, member_id, issue_date, due_date, return_date, status) VALUES (?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO transactions (book_id, member_id, issue_date, due_date, return_date, status, payment_mode) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
@@ -31,6 +31,7 @@ public class TransactionDAOImpl implements TransactionDAO {
                 stmt.setNull(5, Types.DATE);
             }
             stmt.setString(6, transaction.getStatus().name());
+            stmt.setString(7, transaction.getPaymentMode() != null ? transaction.getPaymentMode() : "IN_PERSON");
 
             int affectedRows = stmt.executeUpdate();
             if (affectedRows > 0) {
@@ -50,7 +51,7 @@ public class TransactionDAOImpl implements TransactionDAO {
 
     @Override
     public boolean updateTransaction(Transaction transaction) {
-        String sql = "UPDATE transactions SET book_id = ?, member_id = ?, issue_date = ?, due_date = ?, return_date = ?, status = ? WHERE transaction_id = ?";
+        String sql = "UPDATE transactions SET book_id = ?, member_id = ?, issue_date = ?, due_date = ?, return_date = ?, status = ?, payment_mode = ? WHERE transaction_id = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
@@ -64,7 +65,8 @@ public class TransactionDAOImpl implements TransactionDAO {
                 stmt.setNull(5, Types.DATE);
             }
             stmt.setString(6, transaction.getStatus().name());
-            stmt.setInt(7, transaction.getTransactionId());
+            stmt.setString(7, transaction.getPaymentMode() != null ? transaction.getPaymentMode() : "IN_PERSON");
+            stmt.setInt(8, transaction.getTransactionId());
 
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -177,6 +179,12 @@ public class TransactionDAOImpl implements TransactionDAO {
         Date returnDate = rs.getDate("return_date");
         if (returnDate != null) t.setReturnDate(returnDate.toLocalDate());
         t.setStatus(Transaction.TransactionStatus.valueOf(rs.getString("status")));
+        try {
+            String pm = rs.getString("payment_mode");
+            if (pm != null) t.setPaymentMode(pm);
+        } catch (SQLException ignored) {
+            t.setPaymentMode("IN_PERSON");
+        }
         return t;
     }
 }

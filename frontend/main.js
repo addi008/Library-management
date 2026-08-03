@@ -3,7 +3,11 @@
    Phase 8/9: Full loading states, validation, offline handling
    ============================================================ */
 
-const API_BASE = "http://localhost:4567/api";
+// Auto-detect: if served directly from Spark on 4567, use relative origin.
+// If on a dev server (e.g. Python :8000), still point to :4567.
+const API_BASE = (window.location.port === "4567")
+    ? `${window.location.origin}/api`
+    : "http://localhost:4567/api";
 const HEALTH_CHECK_INTERVAL = 30_000; // 30 seconds
 
 // ─── State Cache ───────────────────────────────────────────
@@ -152,8 +156,14 @@ async function apiRequest(endpoint, options = {}, loadingBtn = null) {
             headers: { "Content-Type": "application/json" },
             ...options,
         });
-        const contentType = res.headers.get("content-type") || "";
-        const data = contentType.includes("application/json") ? await res.json() : {};
+        // Safely parse JSON — Spark may set content-type=json but body is an error page
+        let data = {};
+        try {
+            const text = await res.text();
+            if (text) data = JSON.parse(text);
+        } catch {
+            if (!res.ok) throw new Error(`Server error (HTTP ${res.status})`);
+        }
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
         if (loadingBtn) setButtonLoading(loadingBtn, false);
         return data;
@@ -377,6 +387,10 @@ async function renderTransactionsTable() {
             if (t.status === "RETURNED") statusBadge = "badge-success";
             if (t.status === "OVERDUE")  statusBadge = "badge-overdue";
 
+            const paymentBadge = (t.paymentMode === "CASH_ON_DELIVERY")
+                ? `<span class="badge badge-warning">🚚 COD</span>`
+                : `<span class="badge badge-secondary">🏢 In-Person</span>`;
+
             const isActive = t.status === "ISSUED" || t.status === "OVERDUE";
             return `
                 <tr>
@@ -386,6 +400,7 @@ async function renderTransactionsTable() {
                     <td class="text-muted">${t.issueDate}</td>
                     <td><span class="${t.status === 'OVERDUE' ? 'text-danger' : 'text-muted'}">${t.dueDate}</span></td>
                     <td class="text-muted">${t.returnDate || '—'}</td>
+                    <td>${paymentBadge}</td>
                     <td><span class="badge ${statusBadge}">${t.status}</span></td>
                     <td>
                         ${isActive
@@ -396,7 +411,7 @@ async function renderTransactionsTable() {
                     </td>
                 </tr>
             `;
-        }).join("") || emptyRow(8, "No transaction records.");
+        }).join("") || emptyRow(9, "No transaction records.");
     } catch { /* shown */ }
     finally   { showLoading("transactions", false); }
 }
@@ -452,6 +467,7 @@ async function renderFinesTable(filterMemberId = null) {
                 <tr>
                     <td><code>#${f.fineId}</code></td>
                     <td><code>#${f.transactionId}</code></td>
+                    <td><strong>${escapeHtml(f.reason || 'Late Return')}</strong></td>
                     <td>${member ? escapeHtml(member.name) : '—'}</td>
                     <td><strong style="color:${f.paid ? 'var(--text-muted)' : 'var(--rose-accent)'}">$${parseFloat(f.amount).toFixed(2)}</strong></td>
                     <td><span class="badge ${f.paid ? 'badge-success' : 'badge-danger'}">${f.paid ? 'PAID' : 'UNPAID'}</span></td>
@@ -465,7 +481,7 @@ async function renderFinesTable(filterMemberId = null) {
                     </td>
                 </tr>
             `;
-        }).join("") || emptyRow(7, "🎉 No fines found.");
+        }).join("") || emptyRow(8, "🎉 No fines found.");
     } catch { /* shown */ }
     finally   { showLoading("fines", false); }
 }
@@ -520,13 +536,27 @@ async function loadReports() {
     showLoading("reports-members", true);
     showLoading("reports-fines", true);
     showLoading("reports-books", true);
+    showLoading("reports-reservations", true);
 
     try {
-        const [activeMembers, unpaidFines, topBooks] = await Promise.all([
+        const [activeMembers, unpaidFines, topBooks, finesReport, reservations, txs] = await Promise.all([
             apiRequest("/reports/active-members"),
             apiRequest("/reports/unpaid-fines"),
             apiRequest("/reports/most-borrowed"),
+            apiRequest("/reports/fines-collected"),
+            apiRequest("/reservations"),
+            apiRequest("/transactions"),
         ]);
+
+        if (!booksCache.length)   booksCache   = await apiRequest("/books");
+        if (!membersCache.length) membersCache = await apiRequest("/members");
+
+        // Stats summary
+        setStatCard("report-total-collected", `$${(finesReport.totalCollected || 0).toFixed(2)}`);
+        const pendingCount = reservations.filter(r => r.status === "PENDING").length;
+        setStatCard("report-pending-res", pendingCount);
+        const codCount = txs.filter(t => t.paymentMode === "CASH_ON_DELIVERY").length;
+        setStatCard("report-cod-count", codCount);
 
         const activeTb = document.getElementById("report-active-members");
         if (activeTb) {
@@ -557,16 +587,35 @@ async function loadReports() {
                     <td>${i + 1}</td>
                     <td><strong>${escapeHtml(b.title)}</strong></td>
                     <td class="text-muted">${escapeHtml(b.author)}</td>
-                    <td><code>${escapeHtml(b.isbn)}</code></td>
                     <td><span class="badge badge-info">${b.borrowCount}×</span></td>
                 </tr>
-            `).join("") || emptyRow(5, "No borrow history yet.");
+            `).join("") || emptyRow(4, "No borrow history yet.");
+        }
+
+        const resTb = document.getElementById("report-reservations-list");
+        if (resTb) {
+            resTb.innerHTML = reservations.map(r => {
+                const book   = booksCache.find(b => b.bookId === r.bookId);
+                const member = membersCache.find(m => m.memberId === r.memberId);
+                const badge  = r.status === "PENDING" ? "badge-warning"
+                             : r.status === "FULFILLED" ? "badge-success"
+                             : "badge-secondary";
+                return `
+                    <tr>
+                        <td><strong>${book ? escapeHtml(book.title) : `#${r.bookId}`}</strong></td>
+                        <td>${member ? escapeHtml(member.name) : `#${r.memberId}`}</td>
+                        <td class="text-muted">${r.reservationDate ? String(r.reservationDate).split('T')[0] : '—'}</td>
+                        <td><span class="badge ${badge}">${r.status}</span></td>
+                    </tr>
+                `;
+            }).join("") || emptyRow(4, "No reservations.");
         }
     } catch { /* shown */ }
     finally {
         showLoading("reports-members", false);
         showLoading("reports-fines", false);
         showLoading("reports-books", false);
+        showLoading("reports-reservations", false);
     }
 }
 
@@ -582,13 +631,23 @@ function initForms() {
         const editId  = document.getElementById("edit-book-id").value;
         const isEdit  = !!editId;
         const btn     = document.getElementById("btn-save-book");
+        const newTotal    = parseInt(document.getElementById("add-book-copies").value);
+        // When editing, preserve the checked-out count; only add/remove available copies by delta
+        let newAvailable  = newTotal;
+        if (isEdit) {
+            const orig = booksCache.find(b => b.bookId === parseInt(editId));
+            if (orig) {
+                const delta = newTotal - orig.totalCopies;
+                newAvailable = Math.max(0, orig.availableCopies + delta);
+            }
+        }
         const payload = {
-            title:          document.getElementById("add-book-title").value.trim(),
-            author:         document.getElementById("add-book-author").value.trim(),
-            isbn:           document.getElementById("add-book-isbn").value.trim(),
-            category:       document.getElementById("add-book-category").value.trim(),
-            totalCopies:    parseInt(document.getElementById("add-book-copies").value),
-            availableCopies: parseInt(document.getElementById("add-book-copies").value),
+            title:           document.getElementById("add-book-title").value.trim(),
+            author:          document.getElementById("add-book-author").value.trim(),
+            isbn:            document.getElementById("add-book-isbn").value.trim(),
+            category:        document.getElementById("add-book-category").value.trim(),
+            totalCopies:     newTotal,
+            availableCopies: newAvailable,
         };
 
         try {
@@ -643,6 +702,7 @@ function initForms() {
         const body = {
             memberId: parseInt(document.getElementById("issue-select-member").value),
             bookId:   parseInt(document.getElementById("issue-select-book").value),
+            paymentMode: document.getElementById("issue-select-payment")?.value || "IN_PERSON",
         };
         try {
             await apiRequest("/transactions/issue", { method: "POST", body: JSON.stringify(body) }, btn);

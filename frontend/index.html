@@ -245,6 +245,7 @@
                                     <th>Issue Date</th>
                                     <th>Due Date</th>
                                     <th>Return Date</th>
+                                    <th>Delivery / Payment</th>
                                     <th>Status</th>
                                     <th>Action</th>
                                 </tr>
@@ -279,6 +280,7 @@
                                 <tr>
                                     <th>Fine ID</th>
                                     <th>Trans ID</th>
+                                    <th>Fine Details / Reason</th>
                                     <th>Member</th>
                                     <th>Amount</th>
                                     <th>Status</th>
@@ -328,6 +330,30 @@
                  VIEW: REPORTS / ANALYTICS
                  ───────────────────────────────────── -->
             <section id="view-reports" class="view-panel">
+                <div class="stats-grid" style="margin-bottom:20px">
+                    <div class="stat-card">
+                        <div class="stat-icon">💵</div>
+                        <div class="stat-info">
+                            <span class="stat-label">Total Fine Collections</span>
+                            <h3 id="report-total-collected" class="loading-val">$0.00</h3>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🔖</div>
+                        <div class="stat-info">
+                            <span class="stat-label">Pending Reservations</span>
+                            <h3 id="report-pending-res" class="loading-val">0</h3>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🚚</div>
+                        <div class="stat-info">
+                            <span class="stat-label">COD Orders</span>
+                            <h3 id="report-cod-count" class="loading-val">0</h3>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="content-grid-2">
                     <div class="glass-card">
                         <h3>🏆 Top Active Members</h3>
@@ -354,16 +380,31 @@
                         </div>
                     </div>
                 </div>
-                <div class="glass-card">
-                    <h3>🔥 Most Borrowed Books (Top 10)</h3>
-                    <div class="view-loading" id="loading-reports-books">
-                        <div class="spinner"></div>
+
+                <div class="content-grid-2" style="margin-top:20px">
+                    <div class="glass-card">
+                        <h3>🔥 Most Borrowed Books (Top 10)</h3>
+                        <div class="view-loading" id="loading-reports-books">
+                            <div class="spinner"></div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead><tr><th>Rank</th><th>Title</th><th>Author</th><th>Borrows</th></tr></thead>
+                                <tbody id="report-top-books"></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead><tr><th>Rank</th><th>Title</th><th>Author</th><th>ISBN</th><th>Borrows</th></tr></thead>
-                            <tbody id="report-top-books"></tbody>
-                        </table>
+                    <div class="glass-card">
+                        <h3>🔖 Reservation Demand &amp; Status</h3>
+                        <div class="view-loading" id="loading-reports-reservations">
+                            <div class="spinner"></div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead><tr><th>Book Title</th><th>Member</th><th>Date</th><th>Status</th></tr></thead>
+                                <tbody id="report-reservations-list"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -478,6 +519,13 @@
                 <label for="issue-select-book">Select Available Book *</label>
                 <select id="issue-select-book"></select>
                 <span class="field-error" id="err-issue-book">Please select an available book.</span>
+            </div>
+            <div class="form-group">
+                <label for="issue-select-payment">Delivery / Payment Option</label>
+                <select id="issue-select-payment">
+                    <option value="IN_PERSON">🏢 In-Person Library Pickup</option>
+                    <option value="CASH_ON_DELIVERY">🚚 Cash on Delivery (COD)</option>
+                </select>
             </div>
             <p class="text-muted" style="margin-top:10px;font-size:12px">
                 ⚠️ Max 3 books per member. Stock is checked server-side.
