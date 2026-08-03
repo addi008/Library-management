@@ -87,35 +87,35 @@
                 </div>
                 <div id="dashboard-content">
                     <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon">📚</div>
+                        <div class="stat-card" onclick="switchView('books')" style="cursor:pointer" title="View Books">
+                            <div class="stat-icon">📖</div>
                             <div class="stat-info">
                                 <span class="stat-label">Total Books</span>
                                 <h3 id="stat-books-count" class="loading-val"></h3>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card" onclick="switchView('members')" style="cursor:pointer" title="View Members">
                             <div class="stat-icon">👥</div>
                             <div class="stat-info">
                                 <span class="stat-label">Total Members</span>
                                 <h3 id="stat-members-count" class="loading-val"></h3>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card" onclick="switchView('transactions')" style="cursor:pointer" title="View Transactions">
                             <div class="stat-icon">🔄</div>
                             <div class="stat-info">
                                 <span class="stat-label">Books Issued</span>
                                 <h3 id="stat-issued-count" class="loading-val"></h3>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card" onclick="switchView('transactions')" style="cursor:pointer" title="View Overdue">
                             <div class="stat-icon">⚠️</div>
                             <div class="stat-info">
                                 <span class="stat-label">Overdue Now</span>
                                 <h3 id="stat-overdue-count" class="loading-val"></h3>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card" onclick="switchView('fines')" style="cursor:pointer" title="View Fines">
                             <div class="stat-icon">💰</div>
                             <div class="stat-info">
                                 <span class="stat-label">Fines Collected</span>
@@ -318,6 +318,7 @@
                                     <th>Member</th>
                                     <th>Reserved On</th>
                                     <th>Status</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="reservations-table-body"></tbody>

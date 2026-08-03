@@ -5,8 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
-import com.library.dao.BookDAO;
-import com.library.dao.MemberDAO;
+import com.library.dao.*;
 import com.library.dao.impl.*;
 import com.library.model.*;
 import com.library.service.*;
@@ -342,6 +341,28 @@ public class ApiServer {
             } catch (Exception e) {
                 res.status(400);
                 return errorJson(e.getMessage());
+            }
+        });
+
+        put("/api/reservations/:id/status", (req, res) -> {
+            res.type("application/json");
+            int id = Integer.parseInt(req.params(":id"));
+            Map<String, Object> body = gson.fromJson(req.body(), Map.class);
+            String newStatus = String.valueOf(body.get("status"));
+            try {
+                ReservationDAO dao = new ReservationDAOImpl();
+                Reservation r = dao.getReservationById(id);
+                if (r != null) {
+                    r.setStatus(Reservation.ReservationStatus.valueOf(newStatus));
+                    if (dao.updateReservation(r)) {
+                        return gson.toJson(r);
+                    }
+                }
+                res.status(400);
+                return errorJson("Failed to update reservation ID: " + id);
+            } catch (Exception e) {
+                res.status(400);
+                return errorJson(e.getMessage() != null ? e.getMessage() : "Invalid request");
             }
         });
 

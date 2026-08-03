@@ -54,6 +54,13 @@ function initNavigation() {
         const sb = document.getElementById("sidebar");
         if (sb?.classList.contains("open")) sb.classList.remove("open");
     });
+
+    // Close modal when pressing Escape key
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+            document.querySelectorAll(".modal-overlay.active").forEach(m => m.classList.remove("active"));
+        }
+    });
 }
 
 function switchView(viewName) {
@@ -515,18 +522,41 @@ async function renderReservationsTable() {
             const badge  = r.status === "PENDING" ? "badge-warning"
                          : r.status === "FULFILLED" ? "badge-success"
                          : "badge-secondary";
+            const isPending = r.status === "PENDING";
             return `
                 <tr>
                     <td><code>#${r.reservationId}</code></td>
-                    <td>${book   ? escapeHtml(book.title)  : `#${r.bookId}`}</td>
+                    <td>${book   ? `<strong>${escapeHtml(book.title)}</strong>`  : `#${r.bookId}`}</td>
                     <td>${member ? escapeHtml(member.name) : `#${r.memberId}`}</td>
-                    <td class="text-muted">${r.reservationDate}</td>
+                    <td class="text-muted">${r.reservationDate ? String(r.reservationDate).replace('T', ' ').split('.')[0] : '—'}</td>
                     <td><span class="badge ${badge}">${r.status}</span></td>
+                    <td style="display:flex;gap:6px">
+                        ${isPending
+                            ? `<button class="btn btn-secondary btn-sm" id="btn-ful-${r.reservationId}" onclick="updateReservationStatus(${r.reservationId}, 'FULFILLED')">
+                                   <span class="btn-spinner"></span>✅ Fulfill
+                               </button>
+                               <button class="btn btn-danger btn-sm" id="btn-can-${r.reservationId}" onclick="updateReservationStatus(${r.reservationId}, 'CANCELLED')">
+                                   <span class="btn-spinner"></span>❌ Cancel
+                               </button>`
+                            : `<span class="text-muted" style="font-size:12px">Archived</span>`}
+                    </td>
                 </tr>
             `;
-        }).join("") || emptyRow(5, "No reservations recorded.");
+        }).join("") || emptyRow(6, "No reservations recorded.");
     } catch { /* shown */ }
     finally   { showLoading("reservations", false); }
+}
+
+async function updateReservationStatus(resId, status) {
+    const btn = document.getElementById(status === 'FULFILLED' ? `btn-ful-${resId}` : `btn-can-${resId}`);
+    try {
+        await apiRequest(`/reservations/${resId}/status`, {
+            method: "PUT",
+            body: JSON.stringify({ status })
+        }, btn);
+        showToast(`✅ Reservation #${resId} marked as ${status}!`, "success");
+        renderReservationsTable();
+    } catch { /* shown */ }
 }
 
 // ============================================================
