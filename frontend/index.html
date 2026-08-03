@@ -3,125 +3,167 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Library Management System - Dashboard</title>
+    <title>LibVerse — Library Management System</title>
+    <meta name="description" content="Modern library management system dashboard — manage books, members, transactions, fines and reservations.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="app-wrapper">
+
+    <!-- ═══════════════════════════════════════
+         OFFLINE BANNER
+         ═══════════════════════════════════════ -->
+    <div id="offline-banner" class="offline-banner" role="alert" aria-live="assertive">
+        <span class="banner-icon">⚠️</span>
+        <span>Cannot reach Java REST API at <strong>http://localhost:4567</strong> — start the server and refresh.</span>
+        <button class="banner-retry" onclick="retryConnection()" id="btn-retry">Retry Now</button>
+    </div>
+
     <div class="app-container">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
+
+        <!-- ═══════════════════════════════════════
+             SIDEBAR
+             ═══════════════════════════════════════ -->
+        <aside class="sidebar" id="sidebar" aria-label="Main navigation">
             <div class="brand">
                 <span class="brand-icon">📚</span>
                 <h2>LibVerse</h2>
             </div>
             <nav class="nav-menu">
-                <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                <a href="#dashboard"    class="nav-item active"  data-view="dashboard"     id="nav-dashboard">
                     <span class="nav-icon">📊</span> Dashboard
                 </a>
-                <a href="#books" class="nav-item" data-view="books">
+                <a href="#books"        class="nav-item"         data-view="books"         id="nav-books">
                     <span class="nav-icon">📖</span> Books
                 </a>
-                <a href="#members" class="nav-item" data-view="members">
+                <a href="#members"      class="nav-item"         data-view="members"       id="nav-members">
                     <span class="nav-icon">👥</span> Members
                 </a>
-                <a href="#transactions" class="nav-item" data-view="transactions">
+                <a href="#transactions" class="nav-item"         data-view="transactions"  id="nav-transactions">
                     <span class="nav-icon">🔄</span> Transactions
                 </a>
-                <a href="#fines" class="nav-item" data-view="fines">
+                <a href="#fines"        class="nav-item"         data-view="fines"         id="nav-fines">
                     <span class="nav-icon">💰</span> Fines
                 </a>
-                <a href="#reservations" class="nav-item" data-view="reservations">
+                <a href="#reservations" class="nav-item"         data-view="reservations"  id="nav-reservations">
                     <span class="nav-icon">🔖</span> Reservations
                 </a>
-                <a href="#reports" class="nav-item" data-view="reports">
+                <a href="#reports"      class="nav-item"         data-view="reports"       id="nav-reports">
                     <span class="nav-icon">📈</span> Analytics
                 </a>
             </nav>
-            <div class="server-status">
-                <span class="status-dot online"></span> API Status: <strong id="api-status-text">Connected</strong>
+            <div class="server-status" id="server-status-pill">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="api-status-text">Checking…</span>
             </div>
         </aside>
 
-        <!-- Main Content View Container -->
-        <main class="main-content">
+        <!-- ═══════════════════════════════════════
+             MAIN CONTENT
+             ═══════════════════════════════════════ -->
+        <main class="main-content" id="main">
             <header class="top-header">
-                <h1 id="view-title">Dashboard Overview</h1>
+                <div style="display:flex;align-items:center;gap:14px;">
+                    <button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+                    <h1 id="view-title">Dashboard Overview</h1>
+                </div>
                 <div class="user-badge">
-                    <span class="avatar">⚡</span> Librarian Admin
+                    <span>⚡</span> Librarian Admin
                 </div>
             </header>
 
-            <div id="toast-container"></div>
+            <!-- Toast container -->
+            <div id="toast-container" aria-live="polite"></div>
 
-            <!-- VIEW 1: DASHBOARD -->
+            <!-- ─────────────────────────────────────
+                 VIEW: DASHBOARD
+                 ───────────────────────────────────── -->
             <section id="view-dashboard" class="view-panel active">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon">📚</div>
-                        <div class="stat-info">
-                            <span class="stat-label">Total Books</span>
-                            <h3 id="stat-books-count">--</h3>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">👥</div>
-                        <div class="stat-info">
-                            <span class="stat-label">Total Members</span>
-                            <h3 id="stat-members-count">--</h3>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🔄</div>
-                        <div class="stat-info">
-                            <span class="stat-label">Books Issued</span>
-                            <h3 id="stat-issued-count">--</h3>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-info">
-                            <span class="stat-label">Fines Collected</span>
-                            <h3 id="stat-fines-collected">$0.00</h3>
-                        </div>
-                    </div>
+                <div class="view-loading" id="loading-dashboard">
+                    <div class="spinner"></div> Loading dashboard data…
                 </div>
-
-                <div class="content-grid-2">
-                    <div class="glass-card">
-                        <h3>🔥 Most Borrowed Books</h3>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead>
-                                    <tr><th>Title</th><th>Author</th><th>Borrows</th></tr>
-                                </thead>
-                                <tbody id="dash-top-books"></tbody>
-                            </table>
+                <div id="dashboard-content">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">📚</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Total Books</span>
+                                <h3 id="stat-books-count" class="loading-val"></h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">👥</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Total Members</span>
+                                <h3 id="stat-members-count" class="loading-val"></h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🔄</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Books Issued</span>
+                                <h3 id="stat-issued-count" class="loading-val"></h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⚠️</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Overdue Now</span>
+                                <h3 id="stat-overdue-count" class="loading-val"></h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Fines Collected</span>
+                                <h3 id="stat-fines-collected" class="loading-val"></h3>
+                            </div>
                         </div>
                     </div>
-                    <div class="glass-card">
-                        <h3>⚠️ Overdue Borrowings</h3>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead>
-                                    <tr><th>Trans ID</th><th>Member</th><th>Due Date</th></tr>
-                                </thead>
-                                <tbody id="dash-overdue-list"></tbody>
-                            </table>
+
+                    <div class="content-grid-2">
+                        <div class="glass-card">
+                            <h3>🔥 Most Borrowed Books</h3>
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead><tr><th>Title</th><th>Author</th><th>Borrows</th></tr></thead>
+                                    <tbody id="dash-top-books"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="glass-card">
+                            <h3>⚠️ Overdue Borrowings</h3>
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead><tr><th>Trans ID</th><th>Member</th><th>Due Date</th></tr></thead>
+                                    <tbody id="dash-overdue-list"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- VIEW 2: BOOKS MANAGEMENT -->
+            <!-- ─────────────────────────────────────
+                 VIEW: BOOKS
+                 ───────────────────────────────────── -->
             <section id="view-books" class="view-panel">
                 <div class="toolbar">
-                    <input type="text" id="search-books-input" class="search-input" placeholder="🔍 Search title, author, or ISBN...">
-                    <button class="btn btn-primary" onclick="openModal('modal-add-book')">➕ Add New Book</button>
+                    <div class="toolbar-left">
+                        <input type="search" id="search-books-input" class="search-input"
+                               placeholder="🔍 Search title, author, ISBN…" autocomplete="off">
+                    </div>
+                    <button class="btn btn-primary" id="btn-open-add-book" onclick="openModal('modal-add-book')">
+                        <span class="btn-spinner"></span>➕ Add Book
+                    </button>
                 </div>
                 <div class="glass-card">
+                    <div class="view-loading" id="loading-books">
+                        <div class="spinner"></div> Loading books…
+                    </div>
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
@@ -142,12 +184,23 @@
                 </div>
             </section>
 
-            <!-- VIEW 3: MEMBERS MANAGEMENT -->
+            <!-- ─────────────────────────────────────
+                 VIEW: MEMBERS
+                 ───────────────────────────────────── -->
             <section id="view-members" class="view-panel">
                 <div class="toolbar">
-                    <button class="btn btn-primary" onclick="openModal('modal-add-member')">➕ Register Member</button>
+                    <div class="toolbar-left">
+                        <input type="search" id="search-members-input" class="search-input"
+                               placeholder="🔍 Search name or email…" autocomplete="off">
+                    </div>
+                    <button class="btn btn-primary" onclick="openModal('modal-add-member')">
+                        ➕ Register Member
+                    </button>
                 </div>
                 <div class="glass-card">
+                    <div class="view-loading" id="loading-members">
+                        <div class="spinner"></div> Loading members…
+                    </div>
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
@@ -167,20 +220,28 @@
                 </div>
             </section>
 
-            <!-- VIEW 4: TRANSACTIONS -->
+            <!-- ─────────────────────────────────────
+                 VIEW: TRANSACTIONS
+                 ───────────────────────────────────── -->
             <section id="view-transactions" class="view-panel">
                 <div class="toolbar">
-                    <button class="btn btn-primary" onclick="openModal('modal-issue-book')">📖 Issue Book</button>
+                    <div class="toolbar-left"></div>
+                    <button class="btn btn-primary" onclick="openModal('modal-issue-book')">
+                        📖 Issue Book
+                    </button>
                 </div>
                 <div class="glass-card">
-                    <h3>All Transactions Log</h3>
+                    <h3>📋 All Transactions</h3>
+                    <div class="view-loading" id="loading-transactions">
+                        <div class="spinner"></div> Loading transactions…
+                    </div>
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>Trans ID</th>
-                                    <th>Book ID</th>
-                                    <th>Member ID</th>
+                                    <th>#</th>
+                                    <th>Book</th>
+                                    <th>Member</th>
                                     <th>Issue Date</th>
                                     <th>Due Date</th>
                                     <th>Return Date</th>
@@ -194,19 +255,34 @@
                 </div>
             </section>
 
-            <!-- VIEW 5: FINES -->
+            <!-- ─────────────────────────────────────
+                 VIEW: FINES
+                 ───────────────────────────────────── -->
             <section id="view-fines" class="view-panel">
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <label for="fines-member-filter" style="color:var(--text-muted);font-size:13px;white-space:nowrap">Filter by member:</label>
+                        <select id="fines-member-filter" class="search-input" style="width:220px">
+                            <option value="">All Members</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" onclick="renderFinesTable()">🔄 Refresh</button>
+                </div>
                 <div class="glass-card">
-                    <h3>Fine Audit & Payments</h3>
+                    <h3>💰 Fine Audit &amp; Payments</h3>
+                    <div class="view-loading" id="loading-fines">
+                        <div class="spinner"></div> Loading fines…
+                    </div>
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
                                 <tr>
                                     <th>Fine ID</th>
-                                    <th>Transaction ID</th>
+                                    <th>Trans ID</th>
+                                    <th>Member</th>
                                     <th>Amount</th>
                                     <th>Status</th>
-                                    <th>Paid Date</th>
+                                    <th>Paid On</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -216,21 +292,29 @@
                 </div>
             </section>
 
-            <!-- VIEW 6: RESERVATIONS -->
+            <!-- ─────────────────────────────────────
+                 VIEW: RESERVATIONS
+                 ───────────────────────────────────── -->
             <section id="view-reservations" class="view-panel">
                 <div class="toolbar">
-                    <button class="btn btn-primary" onclick="openModal('modal-reserve-book')">🔖 Reserve Book</button>
+                    <div class="toolbar-left"></div>
+                    <button class="btn btn-primary" onclick="openModal('modal-reserve-book')">
+                        🔖 Place Reservation
+                    </button>
                 </div>
                 <div class="glass-card">
-                    <h3>Active & Historical Reservations</h3>
+                    <h3>🔖 Active &amp; Historical Reservations</h3>
+                    <div class="view-loading" id="loading-reservations">
+                        <div class="spinner"></div> Loading reservations…
+                    </div>
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>Reservation ID</th>
-                                    <th>Book ID</th>
-                                    <th>Member ID</th>
-                                    <th>Date</th>
+                                    <th>#</th>
+                                    <th>Book</th>
+                                    <th>Member</th>
+                                    <th>Reserved On</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
@@ -240,144 +324,204 @@
                 </div>
             </section>
 
-            <!-- VIEW 7: REPORTS -->
+            <!-- ─────────────────────────────────────
+                 VIEW: REPORTS / ANALYTICS
+                 ───────────────────────────────────── -->
             <section id="view-reports" class="view-panel">
                 <div class="content-grid-2">
                     <div class="glass-card">
                         <h3>🏆 Top Active Members</h3>
+                        <div class="view-loading" id="loading-reports-members">
+                            <div class="spinner"></div>
+                        </div>
                         <div class="table-wrapper">
                             <table class="data-table">
-                                <thead>
-                                    <tr><th>Member ID</th><th>Name</th><th>Transactions</th></tr>
-                                </thead>
+                                <thead><tr><th>#</th><th>Name</th><th>Transactions</th></tr></thead>
                                 <tbody id="report-active-members"></tbody>
                             </table>
                         </div>
                     </div>
                     <div class="glass-card">
                         <h3>⚠️ Members with Unpaid Fines</h3>
+                        <div class="view-loading" id="loading-reports-fines">
+                            <div class="spinner"></div>
+                        </div>
                         <div class="table-wrapper">
                             <table class="data-table">
-                                <thead>
-                                    <tr><th>Name</th><th>Email</th><th>Unpaid Total</th></tr>
-                                </thead>
+                                <thead><tr><th>Name</th><th>Email</th><th>Unpaid Total</th></tr></thead>
                                 <tbody id="report-unpaid-fines"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
+                <div class="glass-card">
+                    <h3>🔥 Most Borrowed Books (Top 10)</h3>
+                    <div class="view-loading" id="loading-reports-books">
+                        <div class="spinner"></div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead><tr><th>Rank</th><th>Title</th><th>Author</th><th>ISBN</th><th>Borrows</th></tr></thead>
+                            <tbody id="report-top-books"></tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
+
         </main>
-    </div>
+    </div><!-- /.app-container -->
+</div><!-- /.app-wrapper -->
 
-    <!-- MODAL: ADD BOOK -->
-    <div id="modal-add-book" class="modal-overlay">
-        <div class="modal-content glass-card">
-            <h2>Add New Book</h2>
-            <form id="form-add-book">
+<!-- ═══════════════════════════════════════════════
+     MODAL: ADD / EDIT BOOK
+     ═══════════════════════════════════════════════ -->
+<div id="modal-add-book" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-book-title">
+    <div class="modal-content glass-card">
+        <h2 id="modal-book-title">Add New Book</h2>
+        <form id="form-add-book" novalidate>
+            <input type="hidden" id="edit-book-id">
+            <div class="form-row">
                 <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" id="add-book-title" required>
-                </div>
-                <div class="form-group">
-                    <label>Author</label>
-                    <input type="text" id="add-book-author" required>
-                </div>
-                <div class="form-group">
-                    <label>ISBN</label>
-                    <input type="text" id="add-book-isbn" required>
+                    <label for="add-book-title">Title *</label>
+                    <input type="text" id="add-book-title" placeholder="e.g. Clean Code" autocomplete="off">
+                    <span class="field-error" id="err-book-title">Title is required.</span>
                 </div>
                 <div class="form-group">
-                    <label>Category</label>
-                    <input type="text" id="add-book-category" required>
+                    <label for="add-book-author">Author *</label>
+                    <input type="text" id="add-book-author" placeholder="e.g. Robert C. Martin" autocomplete="off">
+                    <span class="field-error" id="err-book-author">Author is required.</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="add-book-isbn">ISBN *</label>
+                    <input type="text" id="add-book-isbn" placeholder="e.g. 978-0132350884" autocomplete="off">
+                    <span class="field-error" id="err-book-isbn">Valid ISBN is required (10–17 characters).</span>
                 </div>
                 <div class="form-group">
-                    <label>Total Copies</label>
-                    <input type="number" id="add-book-copies" min="1" value="1" required>
+                    <label for="add-book-category">Category *</label>
+                    <input type="text" id="add-book-category" placeholder="e.g. Programming" autocomplete="off">
+                    <span class="field-error" id="err-book-category">Category is required.</span>
                 </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-book')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Book</button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div class="form-group">
+                <label for="add-book-copies">Total Copies *</label>
+                <input type="number" id="add-book-copies" min="1" value="1">
+                <span class="field-error" id="err-book-copies">Must be at least 1 copy.</span>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-book')">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-book">
+                    <span class="btn-spinner"></span>Save Book
+                </button>
+            </div>
+        </form>
     </div>
+</div>
 
-    <!-- MODAL: ADD MEMBER -->
-    <div id="modal-add-member" class="modal-overlay">
-        <div class="modal-content glass-card">
-            <h2>Register New Member</h2>
-            <form id="form-add-member">
+<!-- ═══════════════════════════════════════════════
+     MODAL: ADD / EDIT MEMBER
+     ═══════════════════════════════════════════════ -->
+<div id="modal-add-member" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-member-title">
+    <div class="modal-content glass-card">
+        <h2 id="modal-member-title">Register New Member</h2>
+        <form id="form-add-member" novalidate>
+            <input type="hidden" id="edit-member-id">
+            <div class="form-group">
+                <label for="add-member-name">Full Name *</label>
+                <input type="text" id="add-member-name" placeholder="e.g. Alice Smith" autocomplete="off">
+                <span class="field-error" id="err-member-name">Full name is required (min 2 characters).</span>
+            </div>
+            <div class="form-row">
                 <div class="form-group">
-                    <label>Full Name</label>
-                    <input type="text" id="add-member-name" required>
+                    <label for="add-member-email">Email Address *</label>
+                    <input type="email" id="add-member-email" placeholder="alice@example.com" autocomplete="off">
+                    <span class="field-error" id="err-member-email">Enter a valid email address.</span>
                 </div>
                 <div class="form-group">
-                    <label>Email Address</label>
-                    <input type="email" id="add-member-email" required>
+                    <label for="add-member-phone">Phone *</label>
+                    <input type="text" id="add-member-phone" placeholder="e.g. 555-0101" autocomplete="off">
+                    <span class="field-error" id="err-member-phone">Phone must be 7–15 digits (hyphens allowed).</span>
                 </div>
-                <div class="form-group">
-                    <label>Phone Number</label>
-                    <input type="text" id="add-member-phone" required>
-                </div>
-                <div class="form-group">
-                    <label>Membership Type</label>
-                    <select id="add-member-type">
-                        <option value="STANDARD">STANDARD</option>
-                        <option value="PREMIUM">PREMIUM</option>
-                        <option value="STUDENT">STUDENT</option>
-                    </select>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-member')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Register Member</button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div class="form-group">
+                <label for="add-member-type">Membership Type</label>
+                <select id="add-member-type">
+                    <option value="STANDARD">STANDARD</option>
+                    <option value="PREMIUM">PREMIUM</option>
+                    <option value="STUDENT">STUDENT</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-member')">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-member">
+                    <span class="btn-spinner"></span>Register Member
+                </button>
+            </div>
+        </form>
     </div>
+</div>
 
-    <!-- MODAL: ISSUE BOOK -->
-    <div id="modal-issue-book" class="modal-overlay">
-        <div class="modal-content glass-card">
-            <h2>Issue Book to Member</h2>
-            <form id="form-issue-book">
-                <div class="form-group">
-                    <label>Select Member</label>
-                    <select id="issue-select-member" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Select Available Book</label>
-                    <select id="issue-select-book" required></select>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-issue-book')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Confirm Issue</button>
-                </div>
-            </form>
-        </div>
+<!-- ═══════════════════════════════════════════════
+     MODAL: ISSUE BOOK
+     ═══════════════════════════════════════════════ -->
+<div id="modal-issue-book" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-issue-title">
+    <div class="modal-content glass-card">
+        <h2 id="modal-issue-title">📖 Issue Book to Member</h2>
+        <form id="form-issue-book" novalidate>
+            <div class="form-group">
+                <label for="issue-select-member">Select Member *</label>
+                <select id="issue-select-member"></select>
+                <span class="field-error" id="err-issue-member">Please select a member.</span>
+            </div>
+            <div class="form-group">
+                <label for="issue-select-book">Select Available Book *</label>
+                <select id="issue-select-book"></select>
+                <span class="field-error" id="err-issue-book">Please select an available book.</span>
+            </div>
+            <p class="text-muted" style="margin-top:10px;font-size:12px">
+                ⚠️ Max 3 books per member. Stock is checked server-side.
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-issue-book')">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-issue-book">
+                    <span class="btn-spinner"></span>Confirm Issue
+                </button>
+            </div>
+        </form>
     </div>
+</div>
 
-    <!-- MODAL: RESERVE BOOK -->
-    <div id="modal-reserve-book" class="modal-overlay">
-        <div class="modal-content glass-card">
-            <h2>Reserve Book</h2>
-            <form id="form-reserve-book">
-                <div class="form-group">
-                    <label>Select Member</label>
-                    <select id="reserve-select-member" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Select Book to Reserve</label>
-                    <select id="reserve-select-book" required></select>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-reserve-book')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Confirm Reservation</button>
-                </div>
-            </form>
-        </div>
+<!-- ═══════════════════════════════════════════════
+     MODAL: RESERVE BOOK
+     ═══════════════════════════════════════════════ -->
+<div id="modal-reserve-book" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-reserve-title">
+    <div class="modal-content glass-card">
+        <h2 id="modal-reserve-title">🔖 Reserve a Book</h2>
+        <form id="form-reserve-book" novalidate>
+            <div class="form-group">
+                <label for="reserve-select-member">Select Member *</label>
+                <select id="reserve-select-member"></select>
+                <span class="field-error" id="err-reserve-member">Please select a member.</span>
+            </div>
+            <div class="form-group">
+                <label for="reserve-select-book">Select Book to Reserve *</label>
+                <select id="reserve-select-book"></select>
+                <span class="field-error" id="err-reserve-book">Please select a book.</span>
+            </div>
+            <p class="text-muted" style="margin-top:10px;font-size:12px">
+                💡 You can reserve books that are currently unavailable. You'll be notified when one becomes available.
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-reserve-book')">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-reserve-book">
+                    <span class="btn-spinner"></span>Confirm Reservation
+                </button>
+            </div>
+        </form>
     </div>
+</div>
 
-    <script src="main.js"></script>
+<script src="main.js"></script>
 </body>
 </html>

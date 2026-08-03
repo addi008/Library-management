@@ -1,30 +1,54 @@
+/* ============================================================
+   LibVerse — Library Management SPA
+   Phase 8/9: Full loading states, validation, offline handling
+   ============================================================ */
+
 const API_BASE = "http://localhost:4567/api";
+const HEALTH_CHECK_INTERVAL = 30_000; // 30 seconds
 
-// State cache
-let booksCache = [];
-let membersCache = [];
+// ─── State Cache ───────────────────────────────────────────
+let booksCache       = [];
+let membersCache     = [];
 let transactionsCache = [];
-let finesCache = [];
+let finesCache       = [];
 let reservationsCache = [];
+let apiOnline        = false;
 
-document.addEventListener("DOMContentLoaded", () => {
+// ─── Boot ──────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", async () => {
     initNavigation();
     initForms();
-    checkApiHealth();
-    loadAllData();
+    initSearchFilters();
+    await checkApiHealth();
+    if (apiOnline) {
+        await loadAllData();
+        loadDashboard();
+    }
+    setInterval(checkApiHealth, HEALTH_CHECK_INTERVAL);
 });
 
-// ----------------------------------------------------
-// NAVIGATION & VIEWS
-// ----------------------------------------------------
+// ============================================================
+//  NAVIGATION
+// ============================================================
 function initNavigation() {
-    const navItems = document.querySelectorAll(".nav-item");
-    navItems.forEach(item => {
-        item.addEventListener("click", (e) => {
+    document.querySelectorAll(".nav-item").forEach(item => {
+        item.addEventListener("click", e => {
             e.preventDefault();
-            const viewTarget = item.getAttribute("data-view");
-            switchView(viewTarget);
+            switchView(item.getAttribute("data-view"));
         });
+    });
+
+    // Close modal when clicking backdrop
+    document.querySelectorAll(".modal-overlay").forEach(overlay => {
+        overlay.addEventListener("click", e => {
+            if (e.target === overlay) overlay.classList.remove("active");
+        });
+    });
+
+    // Close sidebar when clicking main content on mobile
+    document.getElementById("main")?.addEventListener("click", () => {
+        const sb = document.getElementById("sidebar");
+        if (sb?.classList.contains("open")) sb.classList.remove("open");
     });
 }
 
@@ -32,395 +56,738 @@ function switchView(viewName) {
     document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
     document.querySelectorAll(".view-panel").forEach(el => el.classList.remove("active"));
 
-    const navEl = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+    const navEl  = document.querySelector(`.nav-item[data-view="${viewName}"]`);
     const viewEl = document.getElementById(`view-${viewName}`);
+    if (navEl)  navEl.classList.add("active");
+    if (viewEl) viewEl.classList.add("active");
 
-    if (navEl && viewEl) {
-        navEl.classList.add("active");
-        viewEl.classList.add("active");
-        document.getElementById("view-title").textContent = navEl.textContent.trim() + " Overview";
+    const titles = {
+        dashboard:    "Dashboard Overview",
+        books:        "📖 Books",
+        members:      "👥 Members",
+        transactions: "🔄 Transactions",
+        fines:        "💰 Fines",
+        reservations: "🔖 Reservations",
+        reports:      "📈 Analytics",
+    };
+    const titleEl = document.getElementById("view-title");
+    if (titleEl) titleEl.textContent = titles[viewName] || viewName;
+
+    switch (viewName) {
+        case "dashboard":    loadDashboard(); break;
+        case "books":        renderBooksTable(); break;
+        case "members":      renderMembersTable(); break;
+        case "transactions": renderTransactionsTable(); break;
+        case "fines":        renderFinesTable(); break;
+        case "reservations": renderReservationsTable(); break;
+        case "reports":      loadReports(); break;
     }
-
-    if (viewName === "dashboard") loadDashboard();
-    if (viewName === "books") renderBooksTable();
-    if (viewName === "members") renderMembersTable();
-    if (viewName === "transactions") renderTransactionsTable();
-    if (viewName === "fines") renderFinesTable();
-    if (viewName === "reservations") renderReservationsTable();
-    if (viewName === "reports") loadReports();
 }
 
-// ----------------------------------------------------
-// API HEALTH & FETCH HELPERS
-// ----------------------------------------------------
+function toggleSidebar() {
+    document.getElementById("sidebar")?.classList.toggle("open");
+}
+
+// ============================================================
+//  API HEALTH & OFFLINE BANNER
+// ============================================================
 async function checkApiHealth() {
     try {
-        const res = await fetch(`${API_BASE}/health`);
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 4000);
+        const res = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
+        clearTimeout(timeout);
         if (res.ok) {
-            document.querySelector(".status-dot").classList.add("online");
-            document.getElementById("api-status-text").textContent = "Connected (4567)";
-        } else {
-            throw new Error();
+            setApiStatus(true);
+            return true;
         }
-    } catch (e) {
-        document.querySelector(".status-dot").classList.remove("online");
-        document.getElementById("api-status-text").textContent = "Offline";
-        showToast("⚠️ Cannot connect to Java REST API at http://localhost:4567/api", "error");
+        throw new Error("Non-OK response");
+    } catch {
+        setApiStatus(false);
+        return false;
     }
 }
 
-async function apiRequest(endpoint, options = {}) {
+function setApiStatus(isOnline) {
+    apiOnline = isOnline;
+    const dot     = document.getElementById("status-dot");
+    const text    = document.getElementById("api-status-text");
+    const banner  = document.getElementById("offline-banner");
+
+    if (isOnline) {
+        dot?.classList.replace("offline", "online") || dot?.classList.add("online");
+        dot?.classList.remove("offline");
+        dot?.classList.add("online");
+        if (text) text.textContent = "Connected (4567)";
+        banner?.classList.remove("visible");
+    } else {
+        dot?.classList.remove("online");
+        dot?.classList.add("offline");
+        if (text) text.textContent = "Offline";
+        banner?.classList.add("visible");
+    }
+}
+
+async function retryConnection() {
+    const btn = document.getElementById("btn-retry");
+    if (btn) { btn.disabled = true; btn.textContent = "Retrying…"; }
+    const ok = await checkApiHealth();
+    if (btn) { btn.disabled = false; btn.textContent = "Retry Now"; }
+    if (ok) {
+        await loadAllData();
+        showToast("✅ Reconnected to API!", "success");
+        loadDashboard();
+    } else {
+        showToast("⚠️ Still unable to reach the API server.", "error");
+    }
+}
+
+// ============================================================
+//  API FETCH HELPER (with loading-state button support)
+// ============================================================
+async function apiRequest(endpoint, options = {}, loadingBtn = null) {
+    if (loadingBtn) setButtonLoading(loadingBtn, true);
     try {
         const res = await fetch(`${API_BASE}${endpoint}`, {
             headers: { "Content-Type": "application/json" },
-            ...options
+            ...options,
         });
-        const data = await res.json();
-        if (!res.ok) {
-            throw new Error(data.error || "API Request Failed");
-        }
+        const contentType = res.headers.get("content-type") || "";
+        const data = contentType.includes("application/json") ? await res.json() : {};
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (loadingBtn) setButtonLoading(loadingBtn, false);
         return data;
     } catch (err) {
-        showToast(err.message, "error");
+        if (loadingBtn) setButtonLoading(loadingBtn, false);
+        if (err.name === "TypeError") {
+            setApiStatus(false);
+            showToast("⚠️ API unreachable. Is the Java server running?", "error");
+        } else {
+            showToast(`❌ ${err.message}`, "error");
+        }
         throw err;
     }
 }
 
-// ----------------------------------------------------
-// DATA LOADERS
-// ----------------------------------------------------
+// ============================================================
+//  DATA LOADERS
+// ============================================================
 async function loadAllData() {
     try {
-        booksCache = await apiRequest("/books");
-        membersCache = await apiRequest("/members");
-        transactionsCache = await apiRequest("/transactions");
-        finesCache = await apiRequest("/fines");
-        reservationsCache = await apiRequest("/reservations");
-        loadDashboard();
-    } catch (e) {
-        console.error("Failed to load initial data", e);
-    }
+        [booksCache, membersCache, transactionsCache, finesCache, reservationsCache] =
+            await Promise.all([
+                apiRequest("/books"),
+                apiRequest("/members"),
+                apiRequest("/transactions"),
+                apiRequest("/fines"),
+                apiRequest("/reservations"),
+            ]);
+        populateFinesMemberFilter();
+    } catch {/* handled in apiRequest */}
 }
 
 async function loadDashboard() {
+    showLoading("dashboard", true);
     try {
-        booksCache = await apiRequest("/books");
-        membersCache = await apiRequest("/members");
-        transactionsCache = await apiRequest("/transactions");
-        
-        document.getElementById("stat-books-count").textContent = booksCache.length;
-        document.getElementById("stat-members-count").textContent = membersCache.length;
-        
-        const activeTx = transactionsCache.filter(t => t.status === "ISSUED" || t.status === "OVERDUE");
-        document.getElementById("stat-issued-count").textContent = activeTx.length;
+        // Refresh live data in parallel
+        const [books, members, txs, overdue, finesReport, topBooks] = await Promise.all([
+            apiRequest("/books"),
+            apiRequest("/members"),
+            apiRequest("/transactions"),
+            apiRequest("/transactions/overdue"),
+            apiRequest("/reports/fines-collected"),
+            apiRequest("/reports/most-borrowed"),
+        ]);
 
-        const finesData = await apiRequest("/reports/fines-collected");
-        document.getElementById("stat-fines-collected").textContent = `$${(finesData.totalCollected || 0).toFixed(2)}`;
+        booksCache        = books;
+        membersCache      = members;
+        transactionsCache = txs;
 
-        const topBooks = await apiRequest("/reports/most-borrowed");
-        const topBooksTb = document.getElementById("dash-top-books");
-        topBooksTb.innerHTML = topBooks.slice(0, 5).map(b => `
-            <tr>
-                <td><strong>${escapeHtml(b.title)}</strong></td>
-                <td>${escapeHtml(b.author)}</td>
-                <td><span class="badge badge-info">${b.borrowCount} times</span></td>
-            </tr>
-        `).join("") || "<tr><td colspan='3'>No borrowing history yet</td></tr>";
+        const activeCount  = txs.filter(t => t.status === "ISSUED" || t.status === "OVERDUE").length;
 
-        const overdueTx = await apiRequest("/transactions/overdue");
-        const overdueTb = document.getElementById("dash-overdue-list");
-        overdueTb.innerHTML = overdueTx.map(t => {
-            const member = membersCache.find(m => m.memberId === t.memberId);
-            return `
+        setStatCard("stat-books-count",    books.length);
+        setStatCard("stat-members-count",  members.length);
+        setStatCard("stat-issued-count",   activeCount);
+        setStatCard("stat-overdue-count",  overdue.length, overdue.length > 0 ? "danger" : "normal");
+        setStatCard("stat-fines-collected", `$${(finesReport.totalCollected || 0).toFixed(2)}`);
+
+        // Top books table
+        const topBooksEl = document.getElementById("dash-top-books");
+        if (topBooksEl) {
+            topBooksEl.innerHTML = topBooks.slice(0, 5).map(b => `
                 <tr>
-                    <td>#${t.transactionId}</td>
-                    <td>${member ? escapeHtml(member.name) : 'ID ' + t.memberId}</td>
-                    <td><span class="badge badge-danger">${t.dueDate}</span></td>
+                    <td><strong>${escapeHtml(b.title)}</strong></td>
+                    <td class="text-muted">${escapeHtml(b.author)}</td>
+                    <td><span class="badge badge-info">${b.borrowCount}×</span></td>
                 </tr>
-            `;
-        }).join("") || "<tr><td colspan='3'>No overdue transactions! 🎉</td></tr>";
+            `).join("") || emptyRow(3, "No borrowing history yet");
+        }
 
-    } catch (e) {
-        console.error("Dashboard error", e);
-    }
+        // Overdue table
+        const overdueEl = document.getElementById("dash-overdue-list");
+        if (overdueEl) {
+            overdueEl.innerHTML = overdue.map(t => {
+                const member = membersCache.find(m => m.memberId === t.memberId);
+                return `
+                    <tr>
+                        <td><code>#${t.transactionId}</code></td>
+                        <td>${member ? escapeHtml(member.name) : `ID #${t.memberId}`}</td>
+                        <td><span class="badge badge-overdue">${t.dueDate}</span></td>
+                    </tr>
+                `;
+            }).join("") || emptyRow(3, "🎉 No overdue transactions!");
+        }
+    } catch { /* already shown */ }
+    finally   { showLoading("dashboard", false); }
 }
 
-// ----------------------------------------------------
-// BOOKS RENDERING & SEARCH
-// ----------------------------------------------------
-async function renderBooksTable() {
-    booksCache = await apiRequest("/books");
-    const tbody = document.getElementById("books-table-body");
-    tbody.innerHTML = booksCache.map(b => `
-        <tr>
-            <td>#${b.bookId}</td>
-            <td><strong>${escapeHtml(b.title)}</strong></td>
-            <td>${escapeHtml(b.author)}</td>
-            <td><code>${escapeHtml(b.isbn)}</code></td>
-            <td><span class="badge badge-secondary">${escapeHtml(b.category)}</span></td>
-            <td><span class="badge ${b.availableCopies > 0 ? 'badge-success' : 'badge-danger'}">${b.availableCopies}</span></td>
-            <td>${b.totalCopies}</td>
-            <td>
-                <button class="btn btn-secondary btn-sm" onclick="deleteBook(${b.bookId})">🗑️ Delete</button>
-            </td>
-        </tr>
-    `).join("") || "<tr><td colspan='8'>No books registered.</td></tr>";
+// ============================================================
+//  BOOKS
+// ============================================================
+async function renderBooksTable(filter = "") {
+    showLoading("books", true);
+    try {
+        if (!filter) booksCache = await apiRequest("/books");
+        const list = filter
+            ? await apiRequest(`/books/search?q=${encodeURIComponent(filter)}`)
+            : booksCache;
+
+        const tbody = document.getElementById("books-table-body");
+        if (!tbody) return;
+        tbody.innerHTML = list.map(b => `
+            <tr>
+                <td><code>#${b.bookId}</code></td>
+                <td><strong>${escapeHtml(b.title)}</strong></td>
+                <td class="text-muted">${escapeHtml(b.author)}</td>
+                <td><code>${escapeHtml(b.isbn)}</code></td>
+                <td><span class="badge badge-secondary">${escapeHtml(b.category)}</span></td>
+                <td>
+                    <span class="badge ${b.availableCopies > 0 ? 'badge-success' : 'badge-danger'}">
+                        ${b.availableCopies} / ${b.totalCopies}
+                    </span>
+                </td>
+                <td>${b.totalCopies}</td>
+                <td style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="btn btn-secondary btn-sm" onclick="openEditBook(${b.bookId})">✏️ Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteBook(${b.bookId})">🗑️</button>
+                </td>
+            </tr>
+        `).join("") || emptyRow(8, "No books found.");
+    } catch { /* shown */ }
+    finally   { showLoading("books", false); }
 }
 
-document.getElementById("search-books-input")?.addEventListener("input", async (e) => {
-    const q = e.target.value.trim();
-    if (!q) {
-        renderBooksTable();
-        return;
-    }
-    const results = await apiRequest(`/books/search?q=${encodeURIComponent(q)}`);
-    const tbody = document.getElementById("books-table-body");
-    tbody.innerHTML = results.map(b => `
-        <tr>
-            <td>#${b.bookId}</td>
-            <td><strong>${escapeHtml(b.title)}</strong></td>
-            <td>${escapeHtml(b.author)}</td>
-            <td><code>${escapeHtml(b.isbn)}</code></td>
-            <td><span class="badge badge-secondary">${escapeHtml(b.category)}</span></td>
-            <td><span class="badge ${b.availableCopies > 0 ? 'badge-success' : 'badge-danger'}">${b.availableCopies}</span></td>
-            <td>${b.totalCopies}</td>
-            <td>
-                <button class="btn btn-secondary btn-sm" onclick="deleteBook(${b.bookId})">🗑️ Delete</button>
-            </td>
-        </tr>
-    `).join("") || "<tr><td colspan='8'>No matching books found.</td></tr>";
-});
+function openEditBook(id) {
+    const book = booksCache.find(b => b.bookId === id);
+    if (!book) return;
+    document.getElementById("modal-book-title").textContent = "Edit Book";
+    document.getElementById("edit-book-id").value         = book.bookId;
+    document.getElementById("add-book-title").value       = book.title;
+    document.getElementById("add-book-author").value      = book.author;
+    document.getElementById("add-book-isbn").value        = book.isbn;
+    document.getElementById("add-book-category").value    = book.category;
+    document.getElementById("add-book-copies").value      = book.totalCopies;
+    clearValidation("form-add-book");
+    openModal("modal-add-book");
+}
 
 async function deleteBook(id) {
-    if (!confirm(`Delete book ID #${id}?`)) return;
+    if (!confirm(`Delete book #${id}? This cannot be undone.`)) return;
     try {
         await apiRequest(`/books/${id}`, { method: "DELETE" });
-        showToast(`Book #${id} deleted successfully.`, "success");
+        showToast(`🗑️ Book #${id} deleted.`, "success");
         renderBooksTable();
-    } catch (e) {}
+    } catch { /* shown */ }
 }
 
-// ----------------------------------------------------
-// MEMBERS RENDERING
-// ----------------------------------------------------
-async function renderMembersTable() {
-    membersCache = await apiRequest("/members");
-    const tbody = document.getElementById("members-table-body");
-    tbody.innerHTML = membersCache.map(m => `
-        <tr>
-            <td>#${m.memberId}</td>
-            <td><strong>${escapeHtml(m.name)}</strong></td>
-            <td>${escapeHtml(m.email)}</td>
-            <td>${escapeHtml(m.phone)}</td>
-            <td><span class="badge badge-info">${m.membershipType}</span></td>
-            <td>${m.membershipDate}</td>
-            <td>
-                <button class="btn btn-secondary btn-sm" onclick="deleteMember(${m.memberId})">🗑️ Delete</button>
-            </td>
-        </tr>
-    `).join("") || "<tr><td colspan='7'>No members registered.</td></tr>";
+// ============================================================
+//  MEMBERS
+// ============================================================
+async function renderMembersTable(filter = "") {
+    showLoading("members", true);
+    try {
+        membersCache = await apiRequest("/members");
+        const list = filter
+            ? membersCache.filter(m =>
+                m.name.toLowerCase().includes(filter.toLowerCase()) ||
+                m.email.toLowerCase().includes(filter.toLowerCase()))
+            : membersCache;
+
+        const tbody = document.getElementById("members-table-body");
+        if (!tbody) return;
+        tbody.innerHTML = list.map(m => `
+            <tr>
+                <td><code>#${m.memberId}</code></td>
+                <td><strong>${escapeHtml(m.name)}</strong></td>
+                <td class="text-muted">${escapeHtml(m.email)}</td>
+                <td>${escapeHtml(m.phone)}</td>
+                <td><span class="badge badge-info">${m.membershipType}</span></td>
+                <td class="text-muted">${m.membershipDate}</td>
+                <td style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="btn btn-secondary btn-sm" onclick="openEditMember(${m.memberId})">✏️ Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteMember(${m.memberId})">🗑️</button>
+                </td>
+            </tr>
+        `).join("") || emptyRow(7, "No members registered.");
+    } catch { /* shown */ }
+    finally   { showLoading("members", false); }
+}
+
+function openEditMember(id) {
+    const m = membersCache.find(m => m.memberId === id);
+    if (!m) return;
+    document.getElementById("modal-member-title").textContent = "Edit Member";
+    document.getElementById("edit-member-id").value     = m.memberId;
+    document.getElementById("add-member-name").value    = m.name;
+    document.getElementById("add-member-email").value   = m.email;
+    document.getElementById("add-member-phone").value   = m.phone;
+    document.getElementById("add-member-type").value    = m.membershipType;
+    clearValidation("form-add-member");
+    openModal("modal-add-member");
 }
 
 async function deleteMember(id) {
-    if (!confirm(`Delete member ID #${id}?`)) return;
+    if (!confirm(`Delete member #${id}? This cannot be undone.`)) return;
     try {
         await apiRequest(`/members/${id}`, { method: "DELETE" });
-        showToast(`Member #${id} deleted.`, "success");
+        showToast(`🗑️ Member #${id} deleted.`, "success");
         renderMembersTable();
-    } catch (e) {}
+    } catch { /* shown */ }
 }
 
-// ----------------------------------------------------
-// TRANSACTIONS RENDERING
-// ----------------------------------------------------
+// ============================================================
+//  TRANSACTIONS
+// ============================================================
 async function renderTransactionsTable() {
-    transactionsCache = await apiRequest("/transactions");
-    const tbody = document.getElementById("transactions-table-body");
-    tbody.innerHTML = transactionsCache.map(t => {
-        let badgeClass = "badge-info";
-        if (t.status === "RETURNED") badgeClass = "badge-success";
-        if (t.status === "OVERDUE") badgeClass = "badge-danger";
+    showLoading("transactions", true);
+    try {
+        transactionsCache = await apiRequest("/transactions");
+        if (!booksCache.length)  booksCache  = await apiRequest("/books");
+        if (!membersCache.length) membersCache = await apiRequest("/members");
 
-        return `
-            <tr>
-                <td>#${t.transactionId}</td>
-                <td>#${t.bookId}</td>
-                <td>#${t.memberId}</td>
-                <td>${t.issueDate}</td>
-                <td>${t.dueDate}</td>
-                <td>${t.returnDate || '--'}</td>
-                <td><span class="badge ${badgeClass}">${t.status}</span></td>
-                <td>
-                    ${t.status === 'ISSUED' || t.status === 'OVERDUE' ? 
-                        `<button class="btn btn-primary btn-sm" onclick="returnBook(${t.transactionId})">↩️ Return</button>` : 
-                        `<span class="text-muted">Completed</span>`}
-                </td>
-            </tr>
-        `;
-    }).join("") || "<tr><td colspan='8'>No transaction records.</td></tr>";
+        const tbody = document.getElementById("transactions-table-body");
+        if (!tbody) return;
+
+        const sorted = [...transactionsCache].sort((a, b) => b.transactionId - a.transactionId);
+
+        tbody.innerHTML = sorted.map(t => {
+            const book   = booksCache.find(b  => b.bookId   === t.bookId);
+            const member = membersCache.find(m => m.memberId === t.memberId);
+            let statusBadge = "badge-info";
+            if (t.status === "RETURNED") statusBadge = "badge-success";
+            if (t.status === "OVERDUE")  statusBadge = "badge-overdue";
+
+            const isActive = t.status === "ISSUED" || t.status === "OVERDUE";
+            return `
+                <tr>
+                    <td><code>#${t.transactionId}</code></td>
+                    <td>${book   ? `<strong>${escapeHtml(book.title)}</strong><br><span class="text-muted" style="font-size:11px">#${t.bookId}</span>` : `#${t.bookId}`}</td>
+                    <td>${member ? `${escapeHtml(member.name)}<br><span class="text-muted" style="font-size:11px">#${t.memberId}</span>`               : `#${t.memberId}`}</td>
+                    <td class="text-muted">${t.issueDate}</td>
+                    <td><span class="${t.status === 'OVERDUE' ? 'text-danger' : 'text-muted'}">${t.dueDate}</span></td>
+                    <td class="text-muted">${t.returnDate || '—'}</td>
+                    <td><span class="badge ${statusBadge}">${t.status}</span></td>
+                    <td>
+                        ${isActive
+                            ? `<button class="btn btn-primary btn-sm" id="btn-return-${t.transactionId}" onclick="returnBook(${t.transactionId})">
+                                   <span class="btn-spinner"></span>↩️ Return
+                               </button>`
+                            : `<span class="text-muted" style="font-size:12px">Completed</span>`}
+                    </td>
+                </tr>
+            `;
+        }).join("") || emptyRow(8, "No transaction records.");
+    } catch { /* shown */ }
+    finally   { showLoading("transactions", false); }
 }
 
 async function returnBook(transId) {
+    const btn = document.getElementById(`btn-return-${transId}`);
     try {
-        const res = await apiRequest("/transactions/return", {
-            method: "POST",
-            body: JSON.stringify({ transactionId: transId })
-        });
-        showToast(`Book transaction #${transId} returned successfully! Status: ${res.status}`, "success");
+        const res = await apiRequest("/transactions/return",
+            { method: "POST", body: JSON.stringify({ transactionId: transId }) },
+            btn
+        );
+        const fineMsg = res.status === "RETURNED" ? "" : "";
+        showToast(`✅ Transaction #${transId} returned! Status: ${res.status}`, "success");
+        // Check if a fine was generated
+        const newFines = await apiRequest("/fines");
+        const prevCount = finesCache.length;
+        finesCache = newFines;
+        if (newFines.length > prevCount) {
+            showToast("💰 A late return fine was automatically generated.", "warning");
+        }
         renderTransactionsTable();
-    } catch (e) {}
+    } catch { /* shown */ }
 }
 
-// ----------------------------------------------------
-// FINES RENDERING
-// ----------------------------------------------------
-async function renderFinesTable() {
-    finesCache = await apiRequest("/fines");
-    const tbody = document.getElementById("fines-table-body");
-    tbody.innerHTML = finesCache.map(f => `
-        <tr>
-            <td>#${f.fineId}</td>
-            <td>#${f.transactionId}</td>
-            <td><strong>$${parseFloat(f.amount).toFixed(2)}</strong></td>
-            <td><span class="badge ${f.paid ? 'badge-success' : 'badge-danger'}">${f.paid ? 'PAID' : 'UNPAID'}</span></td>
-            <td>${f.paidDate || '--'}</td>
-            <td>
-                ${!f.paid ? 
-                    `<button class="btn btn-primary btn-sm" onclick="payFine(${f.fineId})">💳 Pay $${parseFloat(f.amount).toFixed(2)}</button>` : 
-                    `<span class="badge badge-success">Paid</span>`}
-            </td>
-        </tr>
-    `).join("") || "<tr><td colspan='6'>No fine records.</td></tr>";
+// ============================================================
+//  FINES
+// ============================================================
+function populateFinesMemberFilter() {
+    const sel = document.getElementById("fines-member-filter");
+    if (!sel) return;
+    const existing = sel.innerHTML;
+    sel.innerHTML = '<option value="">All Members</option>' +
+        membersCache.map(m => `<option value="${m.memberId}">${escapeHtml(m.name)} (#${m.memberId})</option>`).join("");
+    sel.addEventListener("change", () => renderFinesTable(sel.value ? parseInt(sel.value) : null));
+}
+
+async function renderFinesTable(filterMemberId = null) {
+    showLoading("fines", true);
+    try {
+        const endpoint = filterMemberId ? `/fines/unpaid?memberId=${filterMemberId}` : "/fines";
+        finesCache = await apiRequest(endpoint);
+        if (!membersCache.length) membersCache = await apiRequest("/members");
+
+        const tbody = document.getElementById("fines-table-body");
+        if (!tbody) return;
+
+        const sorted = [...finesCache].sort((a, b) => a.paid - b.paid || b.fineId - a.fineId);
+        tbody.innerHTML = sorted.map(f => {
+            // Look up member via transaction
+            const tx     = transactionsCache.find(t => t.transactionId === f.transactionId);
+            const member = tx ? membersCache.find(m => m.memberId === tx.memberId) : null;
+            return `
+                <tr>
+                    <td><code>#${f.fineId}</code></td>
+                    <td><code>#${f.transactionId}</code></td>
+                    <td>${member ? escapeHtml(member.name) : '—'}</td>
+                    <td><strong style="color:${f.paid ? 'var(--text-muted)' : 'var(--rose-accent)'}">$${parseFloat(f.amount).toFixed(2)}</strong></td>
+                    <td><span class="badge ${f.paid ? 'badge-success' : 'badge-danger'}">${f.paid ? 'PAID' : 'UNPAID'}</span></td>
+                    <td class="text-muted">${f.paidDate || '—'}</td>
+                    <td>
+                        ${!f.paid
+                            ? `<button class="btn btn-primary btn-sm" id="btn-pay-${f.fineId}" onclick="payFine(${f.fineId})">
+                                   <span class="btn-spinner"></span>💳 Pay $${parseFloat(f.amount).toFixed(2)}
+                               </button>`
+                            : `<span class="badge badge-success">✓ Cleared</span>`}
+                    </td>
+                </tr>
+            `;
+        }).join("") || emptyRow(7, "🎉 No fines found.");
+    } catch { /* shown */ }
+    finally   { showLoading("fines", false); }
 }
 
 async function payFine(fineId) {
+    const btn = document.getElementById(`btn-pay-${fineId}`);
     try {
-        await apiRequest(`/fines/${fineId}/pay`, { method: "POST" });
-        showToast(`Fine #${fineId} marked as paid!`, "success");
+        await apiRequest(`/fines/${fineId}/pay`, { method: "POST" }, btn);
+        showToast(`✅ Fine #${fineId} marked as paid!`, "success");
         renderFinesTable();
-    } catch (e) {}
+    } catch { /* shown */ }
 }
 
-// ----------------------------------------------------
-// RESERVATIONS RENDERING
-// ----------------------------------------------------
+// ============================================================
+//  RESERVATIONS
+// ============================================================
 async function renderReservationsTable() {
-    reservationsCache = await apiRequest("/reservations");
-    const tbody = document.getElementById("reservations-table-body");
-    tbody.innerHTML = reservationsCache.map(r => `
-        <tr>
-            <td>#${r.reservationId}</td>
-            <td>#${r.bookId}</td>
-            <td>#${r.memberId}</td>
-            <td>${r.reservationDate}</td>
-            <td><span class="badge ${r.status === 'PENDING' ? 'badge-warning' : 'badge-success'}">${r.status}</span></td>
-        </tr>
-    `).join("") || "<tr><td colspan='5'>No reservations recorded.</td></tr>";
+    showLoading("reservations", true);
+    try {
+        reservationsCache = await apiRequest("/reservations");
+        if (!booksCache.length)  booksCache  = await apiRequest("/books");
+        if (!membersCache.length) membersCache = await apiRequest("/members");
+
+        const tbody = document.getElementById("reservations-table-body");
+        if (!tbody) return;
+
+        const sorted = [...reservationsCache].sort((a, b) => b.reservationId - a.reservationId);
+        tbody.innerHTML = sorted.map(r => {
+            const book   = booksCache.find(b  => b.bookId   === r.bookId);
+            const member = membersCache.find(m => m.memberId === r.memberId);
+            const badge  = r.status === "PENDING" ? "badge-warning"
+                         : r.status === "FULFILLED" ? "badge-success"
+                         : "badge-secondary";
+            return `
+                <tr>
+                    <td><code>#${r.reservationId}</code></td>
+                    <td>${book   ? escapeHtml(book.title)  : `#${r.bookId}`}</td>
+                    <td>${member ? escapeHtml(member.name) : `#${r.memberId}`}</td>
+                    <td class="text-muted">${r.reservationDate}</td>
+                    <td><span class="badge ${badge}">${r.status}</span></td>
+                </tr>
+            `;
+        }).join("") || emptyRow(5, "No reservations recorded.");
+    } catch { /* shown */ }
+    finally   { showLoading("reservations", false); }
 }
 
-// ----------------------------------------------------
-// REPORTS RENDERING
-// ----------------------------------------------------
+// ============================================================
+//  REPORTS / ANALYTICS
+// ============================================================
 async function loadReports() {
-    const activeMembers = await apiRequest("/reports/active-members");
-    const activeTb = document.getElementById("report-active-members");
-    activeTb.innerHTML = activeMembers.map(m => `
-        <tr>
-            <td>#${m.memberId}</td>
-            <td><strong>${escapeHtml(m.name)}</strong></td>
-            <td><span class="badge badge-info">${m.transactionCount} transactions</span></td>
-        </tr>
-    `).join("") || "<tr><td colspan='3'>No activity recorded</td></tr>";
+    showLoading("reports-members", true);
+    showLoading("reports-fines", true);
+    showLoading("reports-books", true);
 
-    const unpaidFines = await apiRequest("/reports/unpaid-fines");
-    const unpaidTb = document.getElementById("report-unpaid-fines");
-    unpaidTb.innerHTML = unpaidFines.map(u => `
-        <tr>
-            <td><strong>${escapeHtml(u.name)}</strong></td>
-            <td>${escapeHtml(u.email)}</td>
-            <td><span class="badge badge-danger">$${parseFloat(u.totalUnpaidFine).toFixed(2)}</span></td>
-        </tr>
-    `).join("") || "<tr><td colspan='3'>No unpaid fines! 🎉</td></tr>";
+    try {
+        const [activeMembers, unpaidFines, topBooks] = await Promise.all([
+            apiRequest("/reports/active-members"),
+            apiRequest("/reports/unpaid-fines"),
+            apiRequest("/reports/most-borrowed"),
+        ]);
+
+        const activeTb = document.getElementById("report-active-members");
+        if (activeTb) {
+            activeTb.innerHTML = activeMembers.map((m, i) => `
+                <tr>
+                    <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                    <td><strong>${escapeHtml(m.name)}</strong></td>
+                    <td><span class="badge badge-info">${m.transactionCount} txns</span></td>
+                </tr>
+            `).join("") || emptyRow(3, "No activity recorded.");
+        }
+
+        const unpaidTb = document.getElementById("report-unpaid-fines");
+        if (unpaidTb) {
+            unpaidTb.innerHTML = unpaidFines.map(u => `
+                <tr>
+                    <td><strong>${escapeHtml(u.name)}</strong></td>
+                    <td class="text-muted">${escapeHtml(u.email)}</td>
+                    <td><span class="badge badge-danger">$${parseFloat(u.totalUnpaidFine).toFixed(2)}</span></td>
+                </tr>
+            `).join("") || emptyRow(3, "🎉 No unpaid fines!");
+        }
+
+        const topBooksTb = document.getElementById("report-top-books");
+        if (topBooksTb) {
+            topBooksTb.innerHTML = topBooks.map((b, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${escapeHtml(b.title)}</strong></td>
+                    <td class="text-muted">${escapeHtml(b.author)}</td>
+                    <td><code>${escapeHtml(b.isbn)}</code></td>
+                    <td><span class="badge badge-info">${b.borrowCount}×</span></td>
+                </tr>
+            `).join("") || emptyRow(5, "No borrow history yet.");
+        }
+    } catch { /* shown */ }
+    finally {
+        showLoading("reports-members", false);
+        showLoading("reports-fines", false);
+        showLoading("reports-books", false);
+    }
 }
 
-// ----------------------------------------------------
-// FORM HANDLERS & MODALS
-// ----------------------------------------------------
+// ============================================================
+//  FORMS, MODALS & CLIENT-SIDE VALIDATION
+// ============================================================
 function initForms() {
-    document.getElementById("form-add-book")?.addEventListener("submit", async (e) => {
+    // ── Add / Edit Book ──────────────────────────────────────
+    document.getElementById("form-add-book")?.addEventListener("submit", async e => {
         e.preventDefault();
-        const book = {
-            title: document.getElementById("add-book-title").value,
-            author: document.getElementById("add-book-author").value,
-            isbn: document.getElementById("add-book-isbn").value,
-            category: document.getElementById("add-book-category").value,
-            totalCopies: parseInt(document.getElementById("add-book-copies").value)
+        if (!validateBookForm()) return;
+
+        const editId  = document.getElementById("edit-book-id").value;
+        const isEdit  = !!editId;
+        const btn     = document.getElementById("btn-save-book");
+        const payload = {
+            title:          document.getElementById("add-book-title").value.trim(),
+            author:         document.getElementById("add-book-author").value.trim(),
+            isbn:           document.getElementById("add-book-isbn").value.trim(),
+            category:       document.getElementById("add-book-category").value.trim(),
+            totalCopies:    parseInt(document.getElementById("add-book-copies").value),
+            availableCopies: parseInt(document.getElementById("add-book-copies").value),
         };
+
         try {
-            await apiRequest("/books", { method: "POST", body: JSON.stringify(book) });
-            showToast("Book added successfully!", "success");
+            if (isEdit) {
+                await apiRequest(`/books/${editId}`, { method: "PUT", body: JSON.stringify(payload) }, btn);
+                showToast(`✅ Book #${editId} updated successfully.`, "success");
+            } else {
+                await apiRequest("/books", { method: "POST", body: JSON.stringify(payload) }, btn);
+                showToast("✅ Book added successfully!", "success");
+            }
             closeModal("modal-add-book");
+            resetBookForm();
             renderBooksTable();
-        } catch (err) {}
+        } catch { /* shown */ }
     });
 
-    document.getElementById("form-add-member")?.addEventListener("submit", async (e) => {
+    // ── Add / Edit Member ────────────────────────────────────
+    document.getElementById("form-add-member")?.addEventListener("submit", async e => {
         e.preventDefault();
-        const member = {
-            name: document.getElementById("add-member-name").value,
-            email: document.getElementById("add-member-email").value,
-            phone: document.getElementById("add-member-phone").value,
-            membershipType: document.getElementById("add-member-type").value
+        if (!validateMemberForm()) return;
+
+        const editId  = document.getElementById("edit-member-id").value;
+        const isEdit  = !!editId;
+        const btn     = document.getElementById("btn-save-member");
+        const payload = {
+            name:           document.getElementById("add-member-name").value.trim(),
+            email:          document.getElementById("add-member-email").value.trim(),
+            phone:          document.getElementById("add-member-phone").value.trim(),
+            membershipType: document.getElementById("add-member-type").value,
         };
+
         try {
-            await apiRequest("/members", { method: "POST", body: JSON.stringify(member) });
-            showToast("Member registered successfully!", "success");
+            if (isEdit) {
+                await apiRequest(`/members/${editId}`, { method: "PUT", body: JSON.stringify(payload) }, btn);
+                showToast(`✅ Member #${editId} updated successfully.`, "success");
+            } else {
+                await apiRequest("/members", { method: "POST", body: JSON.stringify(payload) }, btn);
+                showToast("✅ Member registered successfully!", "success");
+            }
             closeModal("modal-add-member");
+            resetMemberForm();
             renderMembersTable();
-        } catch (err) {}
+        } catch { /* shown */ }
     });
 
-    document.getElementById("form-issue-book")?.addEventListener("submit", async (e) => {
+    // ── Issue Book ───────────────────────────────────────────
+    document.getElementById("form-issue-book")?.addEventListener("submit", async e => {
         e.preventDefault();
+        if (!validateIssueForm()) return;
+
+        const btn  = document.getElementById("btn-issue-book");
         const body = {
             memberId: parseInt(document.getElementById("issue-select-member").value),
-            bookId: parseInt(document.getElementById("issue-select-book").value)
+            bookId:   parseInt(document.getElementById("issue-select-book").value),
         };
         try {
-            await apiRequest("/transactions/issue", { method: "POST", body: JSON.stringify(body) });
-            showToast("Book issued successfully!", "success");
+            await apiRequest("/transactions/issue", { method: "POST", body: JSON.stringify(body) }, btn);
+            showToast("✅ Book issued successfully! Due in 14 days.", "success");
             closeModal("modal-issue-book");
+            booksCache = await apiRequest("/books");
             renderTransactionsTable();
-        } catch (err) {}
+        } catch { /* shown */ }
     });
 
-    document.getElementById("form-reserve-book")?.addEventListener("submit", async (e) => {
+    // ── Reserve Book ─────────────────────────────────────────
+    document.getElementById("form-reserve-book")?.addEventListener("submit", async e => {
         e.preventDefault();
+        if (!validateReserveForm()) return;
+
+        const btn  = document.getElementById("btn-reserve-book");
         const body = {
             memberId: parseInt(document.getElementById("reserve-select-member").value),
-            bookId: parseInt(document.getElementById("reserve-select-book").value)
+            bookId:   parseInt(document.getElementById("reserve-select-book").value),
         };
         try {
-            await apiRequest("/reservations", { method: "POST", body: JSON.stringify(body) });
-            showToast("Reservation placed successfully!", "success");
+            await apiRequest("/reservations", { method: "POST", body: JSON.stringify(body) }, btn);
+            showToast("✅ Reservation placed! Member will be notified when available.", "success");
             closeModal("modal-reserve-book");
             renderReservationsTable();
-        } catch (err) {}
+        } catch { /* shown */ }
     });
 }
 
+// ── Client-side Validation ──────────────────────────────────
+const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PHONE_RE  = /^[\d\-\s\(\)\+]{7,15}$/;
+const ISBN_RE   = /^[\d\-Xx]{10,17}$/;
+
+function validateBookForm() {
+    let valid = true;
+    const title = document.getElementById("add-book-title").value.trim();
+    const author = document.getElementById("add-book-author").value.trim();
+    const isbn   = document.getElementById("add-book-isbn").value.trim();
+    const cat    = document.getElementById("add-book-category").value.trim();
+    const copies = parseInt(document.getElementById("add-book-copies").value);
+
+    valid = setField("add-book-title",    "err-book-title",    !!title)          && valid;
+    valid = setField("add-book-author",   "err-book-author",   !!author)         && valid;
+    valid = setField("add-book-isbn",     "err-book-isbn",     ISBN_RE.test(isbn)) && valid;
+    valid = setField("add-book-category", "err-book-category", !!cat)            && valid;
+    valid = setField("add-book-copies",   "err-book-copies",   copies >= 1)      && valid;
+    return valid;
+}
+
+function validateMemberForm() {
+    let valid = true;
+    const name  = document.getElementById("add-member-name").value.trim();
+    const email = document.getElementById("add-member-email").value.trim();
+    const phone = document.getElementById("add-member-phone").value.trim();
+
+    valid = setField("add-member-name",  "err-member-name",  name.length >= 2)   && valid;
+    valid = setField("add-member-email", "err-member-email", EMAIL_RE.test(email)) && valid;
+    valid = setField("add-member-phone", "err-member-phone", PHONE_RE.test(phone)) && valid;
+    return valid;
+}
+
+function validateIssueForm() {
+    let valid = true;
+    const mem  = document.getElementById("issue-select-member").value;
+    const book = document.getElementById("issue-select-book").value;
+    valid = setField("issue-select-member", "err-issue-member", !!mem)  && valid;
+    valid = setField("issue-select-book",   "err-issue-book",   !!book) && valid;
+    return valid;
+}
+
+function validateReserveForm() {
+    let valid = true;
+    const mem  = document.getElementById("reserve-select-member").value;
+    const book = document.getElementById("reserve-select-book").value;
+    valid = setField("reserve-select-member", "err-reserve-member", !!mem)  && valid;
+    valid = setField("reserve-select-book",   "err-reserve-book",   !!book) && valid;
+    return valid;
+}
+
+/** Sets/clears field invalid state. Returns isValid. */
+function setField(inputId, errId, isValid) {
+    const input = document.getElementById(inputId);
+    const err   = document.getElementById(errId);
+    if (!input) return isValid;
+    if (isValid) {
+        input.classList.remove("invalid");
+        err?.classList.remove("visible");
+    } else {
+        input.classList.add("invalid");
+        err?.classList.add("visible");
+        input.focus();
+    }
+    return isValid;
+}
+
+function clearValidation(formId) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    form.querySelectorAll(".invalid").forEach(el => el.classList.remove("invalid"));
+    form.querySelectorAll(".field-error.visible").forEach(el => el.classList.remove("visible"));
+}
+
+// ── Search Filters ────────────────────────────────────────
+function initSearchFilters() {
+    let bookDebounce, memberDebounce;
+
+    document.getElementById("search-books-input")?.addEventListener("input", e => {
+        clearTimeout(bookDebounce);
+        bookDebounce = setTimeout(() => renderBooksTable(e.target.value.trim()), 300);
+    });
+
+    document.getElementById("search-members-input")?.addEventListener("input", e => {
+        clearTimeout(memberDebounce);
+        memberDebounce = setTimeout(() => renderMembersTable(e.target.value.trim()), 200);
+    });
+}
+
+// ── Modal Management ──────────────────────────────────────
 function openModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal) return;
-    
+
+    if (modalId === "modal-add-book") {
+        const isEdit = !!document.getElementById("edit-book-id")?.value;
+        if (!isEdit) resetBookForm();
+    }
+    if (modalId === "modal-add-member") {
+        const isEdit = !!document.getElementById("edit-member-id")?.value;
+        if (!isEdit) resetMemberForm();
+    }
+
     if (modalId === "modal-issue-book") {
-        populateSelectOptions("issue-select-member", membersCache, "memberId", m => `${m.name} (ID #${m.memberId})`);
-        populateSelectOptions("issue-select-book", booksCache.filter(b => b.availableCopies > 0), "bookId", b => `${b.title} (${b.availableCopies} available)`);
+        populateSelect("issue-select-member", membersCache, "memberId",
+            m => `${m.name} (#${m.memberId})`);
+        populateSelect("issue-select-book",
+            booksCache.filter(b => b.availableCopies > 0), "bookId",
+            b => `${b.title} — ${b.availableCopies} available`);
     }
 
     if (modalId === "modal-reserve-book") {
-        populateSelectOptions("reserve-select-member", membersCache, "memberId", m => `${m.name} (ID #${m.memberId})`);
-        populateSelectOptions("reserve-select-book", booksCache.filter(b => b.availableCopies === 0), "bookId", b => `${b.title} (0 available)`);
+        populateSelect("reserve-select-member", membersCache, "memberId",
+            m => `${m.name} (#${m.memberId})`);
+        populateSelect("reserve-select-book", booksCache, "bookId",
+            b => `${b.title} (${b.availableCopies} available)`);
     }
 
     modal.classList.add("active");
@@ -430,31 +797,104 @@ function closeModal(modalId) {
     document.getElementById(modalId)?.classList.remove("active");
 }
 
-function populateSelectOptions(selectId, items, valKey, labelFn) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    select.innerHTML = items.map(item => `
-        <option value="${item[valKey]}">${escapeHtml(labelFn(item))}</option>
-    `).join("");
+function resetBookForm() {
+    document.getElementById("edit-book-id").value   = "";
+    document.getElementById("add-book-title").value  = "";
+    document.getElementById("add-book-author").value = "";
+    document.getElementById("add-book-isbn").value   = "";
+    document.getElementById("add-book-category").value = "";
+    document.getElementById("add-book-copies").value = "1";
+    document.getElementById("modal-book-title").textContent = "Add New Book";
+    clearValidation("form-add-book");
 }
 
-// ----------------------------------------------------
-// TOAST & UTILS
-// ----------------------------------------------------
+function resetMemberForm() {
+    document.getElementById("edit-member-id").value   = "";
+    document.getElementById("add-member-name").value  = "";
+    document.getElementById("add-member-email").value = "";
+    document.getElementById("add-member-phone").value = "";
+    document.getElementById("add-member-type").value  = "STANDARD";
+    document.getElementById("modal-member-title").textContent = "Register New Member";
+    clearValidation("form-add-member");
+}
+
+function populateSelect(selectId, items, valKey, labelFn) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    if (!items.length) {
+        sel.innerHTML = `<option value="">— None available —</option>`;
+        return;
+    }
+    sel.innerHTML = items.map(item =>
+        `<option value="${item[valKey]}">${escapeHtml(labelFn(item))}</option>`
+    ).join("");
+}
+
+// ============================================================
+//  UI HELPERS
+// ============================================================
+function showLoading(viewId, visible) {
+    const el = document.getElementById(`loading-${viewId}`);
+    if (visible) el?.classList.add("visible");
+    else el?.classList.remove("visible");
+}
+
+function setStatCard(id, value, style = "normal") {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("loading-val");
+    el.textContent = value;
+    if (style === "danger") el.style.color = "var(--rose-accent)";
+    else el.style.color = "";
+}
+
+function setButtonLoading(btn, isLoading) {
+    if (!btn) return;
+    const spinner = btn.querySelector(".btn-spinner");
+    if (isLoading) {
+        btn.disabled = true;
+        btn.classList.add("loading");
+        if (spinner) spinner.style.display = "block";
+    } else {
+        btn.disabled = false;
+        btn.classList.remove("loading");
+        if (spinner) spinner.style.display = "none";
+    }
+}
+
+function emptyRow(cols, msg) {
+    return `<tr class="empty-row"><td colspan="${cols}">${msg}</td></tr>`;
+}
+
+// ============================================================
+//  TOAST NOTIFICATIONS
+// ============================================================
 function showToast(msg, type = "success") {
     const container = document.getElementById("toast-container");
     const toast = document.createElement("div");
     toast.className = `toast toast-${type}`;
-    toast.textContent = msg;
+
+    const icon = { success: "✅", error: "❌", warning: "⚠️", info: "ℹ️" }[type] || "";
+    toast.innerHTML = `<span>${icon}</span><span>${escapeHtml(msg)}</span>`;
+
     container.appendChild(toast);
+    // Auto-remove
+    const delay = type === "error" ? 6000 : 4000;
     setTimeout(() => {
-        toast.remove();
-    }, 4000);
+        toast.style.animation = "none";
+        toast.style.opacity = "0";
+        toast.style.transform = "translateX(120%)";
+        toast.style.transition = "all 0.3s ease";
+        setTimeout(() => toast.remove(), 300);
+    }, delay);
 }
 
+// ============================================================
+//  SECURITY — HTML Escaping
+// ============================================================
 function escapeHtml(str) {
-    if (!str) return '';
+    if (str == null) return "";
     return String(str).replace(/[&<>"']/g, m => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
     })[m]);
 }
