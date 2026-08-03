@@ -204,7 +204,8 @@ async function loadAllData() {
 }
 
 async function loadDashboard() {
-    showLoading("dashboard", true);
+    const isFirstLoad = !booksCache.length && !membersCache.length;
+    if (isFirstLoad) showLoading("dashboard", true);
     try {
         // Refresh live data in parallel
         const [books, members, txs, overdue, finesReport, topBooks] = await Promise.all([
@@ -262,15 +263,11 @@ async function loadDashboard() {
 //  BOOKS
 // ============================================================
 async function renderBooksTable(filter = "") {
-    showLoading("books", true);
-    try {
-        if (!filter) booksCache = await apiRequest("/books");
-        const list = filter
-            ? await apiRequest(`/books/search?q=${encodeURIComponent(filter)}`)
-            : booksCache;
+    const tbody = document.getElementById("books-table-body");
+    if (!tbody) return;
 
-        const tbody = document.getElementById("books-table-body");
-        if (!tbody) return;
+    // Fast-render from cache if available to prevent screen flicker
+    const populate = (list) => {
         tbody.innerHTML = list.map(b => `
             <tr>
                 <td><code>#${b.bookId}</code></td>
@@ -284,12 +281,28 @@ async function renderBooksTable(filter = "") {
                     </span>
                 </td>
                 <td>${b.totalCopies}</td>
-                <td style="display:flex;gap:6px;flex-wrap:wrap">
-                    <button class="btn btn-secondary btn-sm" onclick="openEditBook(${b.bookId})">✏️ Edit</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteBook(${b.bookId})">🗑️</button>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary btn-sm" onclick="openEditBook(${b.bookId})">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteBook(${b.bookId})">🗑️</button>
+                    </div>
                 </td>
             </tr>
         `).join("") || emptyRow(8, "No books found.");
+    };
+
+    if (booksCache.length && !filter) {
+        populate(booksCache);
+    } else if (!booksCache.length) {
+        showLoading("books", true);
+    }
+
+    try {
+        if (!filter) booksCache = await apiRequest("/books");
+        const list = filter
+            ? await apiRequest(`/books/search?q=${encodeURIComponent(filter)}`)
+            : booksCache;
+        populate(list);
     } catch { /* shown */ }
     finally   { showLoading("books", false); }
 }
@@ -321,17 +334,10 @@ async function deleteBook(id) {
 //  MEMBERS
 // ============================================================
 async function renderMembersTable(filter = "") {
-    showLoading("members", true);
-    try {
-        membersCache = await apiRequest("/members");
-        const list = filter
-            ? membersCache.filter(m =>
-                m.name.toLowerCase().includes(filter.toLowerCase()) ||
-                m.email.toLowerCase().includes(filter.toLowerCase()))
-            : membersCache;
+    const tbody = document.getElementById("members-table-body");
+    if (!tbody) return;
 
-        const tbody = document.getElementById("members-table-body");
-        if (!tbody) return;
+    const populate = (list) => {
         tbody.innerHTML = list.map(m => `
             <tr>
                 <td><code>#${m.memberId}</code></td>
@@ -340,12 +346,30 @@ async function renderMembersTable(filter = "") {
                 <td>${escapeHtml(m.phone)}</td>
                 <td><span class="badge badge-info">${m.membershipType}</span></td>
                 <td class="text-muted">${m.membershipDate}</td>
-                <td style="display:flex;gap:6px;flex-wrap:wrap">
-                    <button class="btn btn-secondary btn-sm" onclick="openEditMember(${m.memberId})">✏️ Edit</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteMember(${m.memberId})">🗑️</button>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary btn-sm" onclick="openEditMember(${m.memberId})">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteMember(${m.memberId})">🗑️</button>
+                    </div>
                 </td>
             </tr>
         `).join("") || emptyRow(7, "No members registered.");
+    };
+
+    if (membersCache.length && !filter) {
+        populate(membersCache);
+    } else if (!membersCache.length) {
+        showLoading("members", true);
+    }
+
+    try {
+        membersCache = await apiRequest("/members");
+        const list = filter
+            ? membersCache.filter(m =>
+                m.name.toLowerCase().includes(filter.toLowerCase()) ||
+                m.email.toLowerCase().includes(filter.toLowerCase()))
+            : membersCache;
+        populate(list);
     } catch { /* shown */ }
     finally   { showLoading("members", false); }
 }
@@ -376,17 +400,11 @@ async function deleteMember(id) {
 //  TRANSACTIONS
 // ============================================================
 async function renderTransactionsTable() {
-    showLoading("transactions", true);
-    try {
-        transactionsCache = await apiRequest("/transactions");
-        if (!booksCache.length)  booksCache  = await apiRequest("/books");
-        if (!membersCache.length) membersCache = await apiRequest("/members");
+    const tbody = document.getElementById("transactions-table-body");
+    if (!tbody) return;
 
-        const tbody = document.getElementById("transactions-table-body");
-        if (!tbody) return;
-
-        const sorted = [...transactionsCache].sort((a, b) => b.transactionId - a.transactionId);
-
+    const populate = (txs) => {
+        const sorted = [...txs].sort((a, b) => b.transactionId - a.transactionId);
         tbody.innerHTML = sorted.map(t => {
             const book   = booksCache.find(b  => b.bookId   === t.bookId);
             const member = membersCache.find(m => m.memberId === t.memberId);
@@ -410,15 +428,30 @@ async function renderTransactionsTable() {
                     <td>${paymentBadge}</td>
                     <td><span class="badge ${statusBadge}">${t.status}</span></td>
                     <td>
-                        ${isActive
-                            ? `<button class="btn btn-primary btn-sm" id="btn-return-${t.transactionId}" onclick="returnBook(${t.transactionId})">
-                                   <span class="btn-spinner"></span>↩️ Return
-                               </button>`
-                            : `<span class="text-muted" style="font-size:12px">Completed</span>`}
+                        <div class="action-buttons">
+                            ${isActive
+                                ? `<button class="btn btn-primary btn-sm" id="btn-return-${t.transactionId}" onclick="returnBook(${t.transactionId})">
+                                       <span class="btn-spinner"></span>↩️ Return
+                                   </button>`
+                                : `<span class="text-muted" style="font-size:12px">Completed</span>`}
+                        </div>
                     </td>
                 </tr>
             `;
         }).join("") || emptyRow(9, "No transaction records.");
+    };
+
+    if (transactionsCache.length) {
+        populate(transactionsCache);
+    } else {
+        showLoading("transactions", true);
+    }
+
+    try {
+        transactionsCache = await apiRequest("/transactions");
+        if (!booksCache.length)  booksCache  = await apiRequest("/books");
+        if (!membersCache.length) membersCache = await apiRequest("/members");
+        populate(transactionsCache);
     } catch { /* shown */ }
     finally   { showLoading("transactions", false); }
 }
@@ -456,18 +489,12 @@ function populateFinesMemberFilter() {
 }
 
 async function renderFinesTable(filterMemberId = null) {
-    showLoading("fines", true);
-    try {
-        const endpoint = filterMemberId ? `/fines/unpaid?memberId=${filterMemberId}` : "/fines";
-        finesCache = await apiRequest(endpoint);
-        if (!membersCache.length) membersCache = await apiRequest("/members");
+    const tbody = document.getElementById("fines-table-body");
+    if (!tbody) return;
 
-        const tbody = document.getElementById("fines-table-body");
-        if (!tbody) return;
-
-        const sorted = [...finesCache].sort((a, b) => a.paid - b.paid || b.fineId - a.fineId);
+    const populate = (fines) => {
+        const sorted = [...fines].sort((a, b) => a.paid - b.paid || b.fineId - a.fineId);
         tbody.innerHTML = sorted.map(f => {
-            // Look up member via transaction
             const tx     = transactionsCache.find(t => t.transactionId === f.transactionId);
             const member = tx ? membersCache.find(m => m.memberId === tx.memberId) : null;
             return `
@@ -476,19 +503,34 @@ async function renderFinesTable(filterMemberId = null) {
                     <td><code>#${f.transactionId}</code></td>
                     <td><strong>${escapeHtml(f.reason || 'Late Return')}</strong></td>
                     <td>${member ? escapeHtml(member.name) : '—'}</td>
-                    <td><strong style="color:${f.paid ? 'var(--text-muted)' : 'var(--rose-accent)'}">$${parseFloat(f.amount).toFixed(2)}</strong></td>
+                    <td><strong style="color:${f.paid ? 'var(--text-muted)' : 'var(--pink-accent)'}">$${parseFloat(f.amount).toFixed(2)}</strong></td>
                     <td><span class="badge ${f.paid ? 'badge-success' : 'badge-danger'}">${f.paid ? 'PAID' : 'UNPAID'}</span></td>
                     <td class="text-muted">${f.paidDate || '—'}</td>
                     <td>
-                        ${!f.paid
-                            ? `<button class="btn btn-primary btn-sm" id="btn-pay-${f.fineId}" onclick="payFine(${f.fineId})">
-                                   <span class="btn-spinner"></span>💳 Pay $${parseFloat(f.amount).toFixed(2)}
-                               </button>`
-                            : `<span class="badge badge-success">✓ Cleared</span>`}
+                        <div class="action-buttons">
+                            ${!f.paid
+                                ? `<button class="btn btn-primary btn-sm" id="btn-pay-${f.fineId}" onclick="payFine(${f.fineId})">
+                                       <span class="btn-spinner"></span>💳 Pay $${parseFloat(f.amount).toFixed(2)}
+                                   </button>`
+                                : `<span class="badge badge-success">✓ Cleared</span>`}
+                        </div>
                     </td>
                 </tr>
             `;
         }).join("") || emptyRow(8, "🎉 No fines found.");
+    };
+
+    if (finesCache.length && !filterMemberId) {
+        populate(finesCache);
+    } else if (!finesCache.length) {
+        showLoading("fines", true);
+    }
+
+    try {
+        const endpoint = filterMemberId ? `/fines/unpaid?memberId=${filterMemberId}` : "/fines";
+        finesCache = await apiRequest(endpoint);
+        if (!membersCache.length) membersCache = await apiRequest("/members");
+        populate(finesCache);
     } catch { /* shown */ }
     finally   { showLoading("fines", false); }
 }
@@ -506,16 +548,11 @@ async function payFine(fineId) {
 //  RESERVATIONS
 // ============================================================
 async function renderReservationsTable() {
-    showLoading("reservations", true);
-    try {
-        reservationsCache = await apiRequest("/reservations");
-        if (!booksCache.length)  booksCache  = await apiRequest("/books");
-        if (!membersCache.length) membersCache = await apiRequest("/members");
+    const tbody = document.getElementById("reservations-table-body");
+    if (!tbody) return;
 
-        const tbody = document.getElementById("reservations-table-body");
-        if (!tbody) return;
-
-        const sorted = [...reservationsCache].sort((a, b) => b.reservationId - a.reservationId);
+    const populate = (resList) => {
+        const sorted = [...resList].sort((a, b) => b.reservationId - a.reservationId);
         tbody.innerHTML = sorted.map(r => {
             const book   = booksCache.find(b  => b.bookId   === r.bookId);
             const member = membersCache.find(m => m.memberId === r.memberId);
@@ -530,19 +567,34 @@ async function renderReservationsTable() {
                     <td>${member ? escapeHtml(member.name) : `#${r.memberId}`}</td>
                     <td class="text-muted">${r.reservationDate ? String(r.reservationDate).replace('T', ' ').split('.')[0] : '—'}</td>
                     <td><span class="badge ${badge}">${r.status}</span></td>
-                    <td style="display:flex;gap:6px">
-                        ${isPending
-                            ? `<button class="btn btn-secondary btn-sm" id="btn-ful-${r.reservationId}" onclick="updateReservationStatus(${r.reservationId}, 'FULFILLED')">
-                                   <span class="btn-spinner"></span>✅ Fulfill
-                               </button>
-                               <button class="btn btn-danger btn-sm" id="btn-can-${r.reservationId}" onclick="updateReservationStatus(${r.reservationId}, 'CANCELLED')">
-                                   <span class="btn-spinner"></span>❌ Cancel
-                               </button>`
-                            : `<span class="text-muted" style="font-size:12px">Archived</span>`}
+                    <td>
+                        <div class="action-buttons">
+                            ${isPending
+                                ? `<button class="btn btn-secondary btn-sm" id="btn-ful-${r.reservationId}" onclick="updateReservationStatus(${r.reservationId}, 'FULFILLED')">
+                                       <span class="btn-spinner"></span>✅ Fulfill
+                                   </button>
+                                   <button class="btn btn-danger btn-sm" id="btn-can-${r.reservationId}" onclick="updateReservationStatus(${r.reservationId}, 'CANCELLED')">
+                                       <span class="btn-spinner"></span>❌ Cancel
+                                   </button>`
+                                : `<span class="text-muted" style="font-size:12px">Archived</span>`}
+                        </div>
                     </td>
                 </tr>
             `;
         }).join("") || emptyRow(6, "No reservations recorded.");
+    };
+
+    if (reservationsCache.length) {
+        populate(reservationsCache);
+    } else {
+        showLoading("reservations", true);
+    }
+
+    try {
+        reservationsCache = await apiRequest("/reservations");
+        if (!booksCache.length)  booksCache  = await apiRequest("/books");
+        if (!membersCache.length) membersCache = await apiRequest("/members");
+        populate(reservationsCache);
     } catch { /* shown */ }
     finally   { showLoading("reservations", false); }
 }
